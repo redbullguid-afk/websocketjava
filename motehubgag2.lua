@@ -1,25 +1,24 @@
--- [[ GROW A GARDEN - SAFE AUTO PET BUYER (HOLD TIME FIX) ]] --
+-- [[ GROW A GARDEN - AUTO PET (DEEP SEARCH FIX) ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 
 -- Clear UI cũ
-if CoreGui:FindFirstChild("SafeAutoPetGui") then
-    CoreGui.SafeAutoPetGui:Destroy()
+if CoreGui:FindFirstChild("DeepAutoPetGui") then
+    CoreGui.DeepAutoPetGui:Destroy()
 end
 
 -- TẠO UI BẬT / TẮT
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "SafeAutoPetGui"
+Gui.Name = "DeepAutoPetGui"
 Gui.Parent = CoreGui
 
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Parent = Gui
-ToggleBtn.Size = UDim2.new(0, 140, 0, 40)
+ToggleBtn.Size = UDim2.new(0, 150, 0, 40)
 ToggleBtn.Position = UDim2.new(0.02, 0, 0.2, 0)
 ToggleBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
 ToggleBtn.Text = "AUTO PET: OFF"
@@ -46,85 +45,85 @@ ToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- HÀM KIỂM TRA XEM CÓ PHẢI NPC HOẶC NGƯỜI CHƠI KHÔNG
-local function IsNPCOrPlayer(model)
-    if Players:GetPlayerFromCharacter(model) then return true end
-    if model:FindFirstChildWhichIsA("Humanoid") then return true end
-    
-    local nameLower = model.Name:lower()
-    if string.find(nameLower, "npc") or string.find(nameLower, "shopkeeper") or string.find(nameLower, "merchant") or string.find(nameLower, "quest") then
-        return true
-    end
-
+-- HÀM KIỂM TRA NPC / PLAYER DỰA VÀO CẤU TRÚC
+local function IsPlayerOrCharacter(obj)
+    if Players:GetPlayerFromCharacter(obj) then return true end
+    if obj.Parent and Players:GetPlayerFromCharacter(obj.Parent) then return true end
+    if LocalPlayer.Character and obj:IsDescendantOf(LocalPlayer.Character) then return true end
     return false
 end
 
--- HÀM KÍCH HOẠT NÚT GIỮ E (BYPASS HOLD TIME)
-local function FirePromptWithHold(prompt)
+-- HÀM KÍCH HOẠT MUA PET
+local function BuyPetPrompt(prompt)
     if not prompt or not prompt:IsA("ProximityPrompt") then return end
-
-    -- Lấy thời gian cần giữ của game (ví dụ: 1.5 giây hay 2 giây)
-    local holdTime = prompt.HoldDuration or 0
-
+    
     pcall(function()
-        -- CÁCH A: Thử ép thời gian giữ về 0 để mua tức thì
-        prompt.HoldDuration = 0
-        fireproximityprompt(prompt)
+        prompt.RequiresLineOfSight = false
     end)
 
-    -- CÁCH B: Dự phòng nếu game chống chỉnh HoldDuration (Giả lập giữ phím chuẩn)
+    local holdTime = prompt.HoldDuration or 0.5
+
     task.spawn(function()
-        pcall(function()
-            if promptInputWillBegin then
-                promptInputWillBegin(prompt)
-                task.wait(holdTime + 0.1) -- Giữ đúng số giây game yêu cầu
-                promptInputEnded(prompt)
-            end
-        end)
+        local startTime = tick()
+        while tick() - startTime <= (holdTime + 0.3) do
+            pcall(function()
+                fireproximityprompt(prompt)
+            end)
+            task.wait(0.05)
+        end
     end)
 end
 
--- HÀM XỬ LÝ MUA/TELEPORT PET AN TOÀN
-local function ProcessSafePet(obj)
+-- QUÉT TẤT CẢ PROXIMITY PROMPT TRÊN BẢN ĐỒ
+local function FindAndTeleportToPet()
     if not isAutoEnabled then return end
-    if not obj or not obj.Parent then return end
 
-    -- Bỏ qua NPC và Người chơi
-    if IsNPCOrPlayer(obj) then return end
+    local char = LocalPlayer.Character
+    if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+    local hrp = char.HumanoidRootPart
 
-    local nameLower = obj.Name:lower()
+    -- Quét toàn bộ ProximityPrompt có trong Workspace
+    for _, prompt in ipairs(Workspace:GetDescendants()) do
+        if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+            local parentModel = prompt.Parent
+            
+            -- Lùi lên lấy Model chứa con Pet
+            while parentModel and not parentModel:IsA("Model") and parentModel ~= Workspace do
+                parentModel = parentModel.Parent
+            end
 
-    -- Lọc vật thể có chứa từ 'pet'
-    if string.find(nameLower, "pet") and not string.find(nameLower, "egg") then
-        
-        local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-        
-        if prompt then
-            pcall(function()
-                local char = LocalPlayer.Character
-                if char and char:FindFirstChild("HumanoidRootPart") then
-                    -- Bay tới vị trí Pet
-                    local targetCFrame = obj:GetPivot()
-                    char.HumanoidRootPart.CFrame = targetCFrame * CFrame.new(0, 3, 0)
+            if parentModel and parentModel ~= Workspace and not IsPlayerOrCharacter(parentModel) then
+                local nameLower = parentModel.Name:lower()
+                local promptObjectLower = prompt.ObjectText:lower()
+                local promptActionLower = prompt.ActionText:lower()
+
+                -- Kiểm tra từ khóa Mua / Pet
+                local isPet = string.find(nameLower, "pet") 
+                           or string.find(promptObjectLower, "pet") 
+                           or string.find(promptActionLower, "buy") 
+                           or string.find(promptActionLower, "take")
+                           or string.find(promptActionLower, "claim")
+
+                if isPet and not string.find(nameLower, "egg") and not string.find(nameLower, "shop") then
                     
-                    task.wait(0.15)
-                    -- Thực thi giữ nút mua Pet
-                    FirePromptWithHold(prompt)
+                    -- Dịch chuyển tới đứng sát Pet
+                    local petPos = prompt.Parent:IsA("BasePart") and prompt.Parent.Position or parentModel:GetPivot().Position
+                    hrp.CFrame = CFrame.new(petPos + Vector3.new(0, 1, 2), petPos)
+
+                    task.wait(0.2)
+                    BuyPetPrompt(prompt)
+                    break -- Xử lý 1 con mỗi lần quét
                 end
-            end)
+            end
         end
     end
 end
 
--- VÒNG LẶP QUÉT ĐỊNH KỲ
+-- VÒNG LẶP QUÉT TẬN GỐC
 task.spawn(function()
     while true do
         if isAutoEnabled then
-            for _, obj in ipairs(Workspace:GetChildren()) do
-                if obj:IsA("Model") or obj:IsA("BasePart") then
-                    ProcessSafePet(obj)
-                end
-            end
+            pcall(FindAndTeleportToPet)
         end
         task.wait(1.5)
     end
