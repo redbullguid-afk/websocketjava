@@ -1,4 +1,4 @@
--- [[ AUTO BUY / TELEPORT TO RANDOM SPAWNED PETS ]] --
+-- [[ GROW A GARDEN - SAFE AUTO PET BUYER (HOLD TIME FIX) ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -8,71 +8,124 @@ local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
 -- Clear UI cũ
-if CoreGui:FindFirstChild("AutoPetBuyerGui") then
-    CoreGui.AutoPetBuyerGui:Destroy()
+if CoreGui:FindFirstChild("SafeAutoPetGui") then
+    CoreGui.SafeAutoPetGui:Destroy()
 end
 
--- TỰ ĐỘNG TÌM THƯ MỤC CHỨA PET HOẶC TÌM TRONG WORKSPACE
--- (Thường Pet sẽ nằm trong Workspace, hoặc Workspace.Pets, Workspace.SpawnedPets, v.v.)
-local TargetFolder = Workspace:FindFirstChild("Pets") or Workspace:FindFirstChild("SpawnedPets") or Workspace
+-- TẠO UI BẬT / TẮT
+local Gui = Instance.new("ScreenGui")
+Gui.Name = "SafeAutoPetGui"
+Gui.Parent = CoreGui
 
--- HÀM MUA / DỊCH CHUYỂN ĐẾN PET
-local function ProcessPet(obj)
-    -- Kiểm tra xem Object xuất hiện có phải là Pet hay không (dựa vào tên hoặc thuộc tính)
-    local nameLower = obj.Name:lower()
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Parent = Gui
+ToggleBtn.Size = UDim2.new(0, 140, 0, 40)
+ToggleBtn.Position = UDim2.new(0.02, 0, 0.2, 0)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+ToggleBtn.Text = "AUTO PET: OFF"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 85, 85)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.TextSize = 15
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true
+
+local UICorner = Instance.new("UICorner")
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = ToggleBtn
+
+local isAutoEnabled = false
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    isAutoEnabled = not isAutoEnabled
+    if isAutoEnabled then
+        ToggleBtn.Text = "AUTO PET: ON"
+        ToggleBtn.TextColor3 = Color3.fromRGB(85, 255, 127)
+    else
+        ToggleBtn.Text = "AUTO PET: OFF"
+        ToggleBtn.TextColor3 = Color3.fromRGB(255, 85, 85)
+    end
+end)
+
+-- HÀM KIỂM TRA XEM CÓ PHẢI NPC HOẶC NGƯỜI CHƠI KHÔNG
+local function IsNPCOrPlayer(model)
+    if Players:GetPlayerFromCharacter(model) then return true end
+    if model:FindFirstChildWhichIsA("Humanoid") then return true end
     
-    -- Lọc bỏ Character của người chơi khác
-    if Players:GetPlayerFromCharacter(obj) then return end
+    local nameLower = model.Name:lower()
+    if string.find(nameLower, "npc") or string.find(nameLower, "shopkeeper") or string.find(nameLower, "merchant") or string.find(nameLower, "quest") then
+        return true
+    end
 
-    -- Nhận diện Pet (Kiểm tra tên có chữ 'pet', hoặc có chứa Prompt/TouchInterest)
-    if string.find(nameLower, "pet") or obj:FindFirstChildWhichIsA("ProximityPrompt", true) or obj:FindFirstChildWhichIsA("TouchTransporter", true) then
-        
-        print("🐾 Phát hiện Pet mới xuất hiện:", obj.Name)
-        
-        -- CÁCH A: Dịch chuyển nhân vật đến vị trí Pet để mua/nhặt
+    return false
+end
+
+-- HÀM KÍCH HOẠT NÚT GIỮ E (BYPASS HOLD TIME)
+local function FirePromptWithHold(prompt)
+    if not prompt or not prompt:IsA("ProximityPrompt") then return end
+
+    -- Lấy thời gian cần giữ của game (ví dụ: 1.5 giây hay 2 giây)
+    local holdTime = prompt.HoldDuration or 0
+
+    pcall(function()
+        -- CÁCH A: Thử ép thời gian giữ về 0 để mua tức thì
+        prompt.HoldDuration = 0
+        fireproximityprompt(prompt)
+    end)
+
+    -- CÁCH B: Dự phòng nếu game chống chỉnh HoldDuration (Giả lập giữ phím chuẩn)
+    task.spawn(function()
         pcall(function()
-            local char = LocalPlayer.Character
-            if char and char:FindFirstChild("HumanoidRootPart") then
-                local petCFrame = obj:GetPivot()
-                char.HumanoidRootPart.CFrame = petCFrame * CFrame.new(0, 3, 0) -- Bay đến đỉnh đầu Pet
+            if promptInputWillBegin then
+                promptInputWillBegin(prompt)
+                task.wait(holdTime + 0.1) -- Giữ đúng số giây game yêu cầu
+                promptInputEnded(prompt)
             end
         end)
+    end)
+end
 
-        -- CÁCH B: Tự kích hoạt ProximityPrompt (Nút giữ E để mua) nếu có
-        pcall(function()
-            local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
-            if prompt then
-                fireproximityprompt(prompt)
-            end
-        end)
+-- HÀM XỬ LÝ MUA/TELEPORT PET AN TOÀN
+local function ProcessSafePet(obj)
+    if not isAutoEnabled then return end
+    if not obj or not obj.Parent then return end
 
-        -- CÁCH C: Thử gửi Remote buy nếu game dùng RemoteEvent
-        pcall(function()
-            for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
-                if remote:IsA("RemoteEvent") or remote:IsA("RemoteFunction") then
-                    local rName = remote.Name:lower()
-                    if string.find(rName, "buypet") or string.find(rName, "claimpet") or string.find(rName, "pet") then
-                        if remote:IsA("RemoteEvent") then
-                            remote:FireServer(obj)
-                        else
-                            remote:InvokeServer(obj)
-                        end
-                    end
+    -- Bỏ qua NPC và Người chơi
+    if IsNPCOrPlayer(obj) then return end
+
+    local nameLower = obj.Name:lower()
+
+    -- Lọc vật thể có chứa từ 'pet'
+    if string.find(nameLower, "pet") and not string.find(nameLower, "egg") then
+        
+        local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+        
+        if prompt then
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char and char:FindFirstChild("HumanoidRootPart") then
+                    -- Bay tới vị trí Pet
+                    local targetCFrame = obj:GetPivot()
+                    char.HumanoidRootPart.CFrame = targetCFrame * CFrame.new(0, 3, 0)
+                    
+                    task.wait(0.15)
+                    -- Thực thi giữ nút mua Pet
+                    FirePromptWithHold(prompt)
                 end
-            end
-        end)
+            end)
+        end
     end
 end
 
--- 1. LẮNG NGHE SỰ KIỆN PET MỚI SPAWN (REAL-TIME)
-TargetFolder.ChildAdded:Connect(function(child)
-    task.wait(0.1) -- Đợi 0.1s để Pet load đủ dữ liệu
-    ProcessPet(child)
+-- VÒNG LẶP QUÉT ĐỊNH KỲ
+task.spawn(function()
+    while true do
+        if isAutoEnabled then
+            for _, obj in ipairs(Workspace:GetChildren()) do
+                if obj:IsA("Model") or obj:IsA("BasePart") then
+                    ProcessSafePet(obj)
+                end
+            end
+        end
+        task.wait(1.5)
+    end
 end)
-
--- 2. QUÉT SẴN CÁC PET ĐÃ SPAWN TỪ TRƯỚC TRÊN BẢN ĐỒ
-for _, child in ipairs(TargetFolder:GetChildren()) do
-    ProcessPet(child)
-end
-
-print("⚡ Auto Pet Buyer đã kích hoạt ngầm thành công!")
