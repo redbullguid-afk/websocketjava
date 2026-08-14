@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN - ALL ENGLISH SEED CHECKER SCRIPT ]] --
+-- [[ GROW A GARDEN - ACCURATE SHOP CHECKER (ENGLISH) ]] --
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -16,18 +16,18 @@ local SeedList = {
     "Moonflower", "Sunbulb", "Hypno Flower", "Dragon Breath", "Starfruit"
 }
 
--- Clear old UI if exists
-if CoreGui:FindFirstChild("GardenCheckerEn") then
-    CoreGui.GardenCheckerEn:Destroy()
+-- Clear old UI
+if CoreGui:FindFirstChild("GardenCheckerAccurate") then
+    CoreGui.GardenCheckerAccurate:Destroy()
 end
 
 -- MAIN GUI
 local GardenGui = Instance.new("ScreenGui")
-GardenGui.Name = "GardenCheckerEn"
+GardenGui.Name = "GardenCheckerAccurate"
 GardenGui.Parent = CoreGui
 GardenGui.ResetOnSpawn = false
 
--- TOGGLE BUTTON (HORIZONTAL DESIGN)
+-- TOGGLE BUTTON (HORIZONTAL)
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Name = "ToggleButton"
 ToggleBtn.Parent = GardenGui
@@ -74,7 +74,7 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 10)
 TitleCorner.Parent = Title
 
--- TAB BAR (TAB 1: INFO)
+-- TAB BAR
 local TabBar = Instance.new("Frame")
 TabBar.Parent = MainFrame
 TabBar.Position = UDim2.new(0, 10, 0, 45)
@@ -122,7 +122,7 @@ ToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- GENERATE LIST ROWS
+-- BUILD ROWS
 local SeedRows = {}
 
 for i, seedName in ipairs(SeedList) do
@@ -160,58 +160,77 @@ for i, seedName in ipairs(SeedList) do
     SeedRows[seedName:lower()] = StatusLabel
 end
 
--- ADVANCED MULTI-SCANNER FOR SHOP DATA
-local function ScanShop()
-    local StockData = {}
+-- ACCURATE SHOP SCANNER
+local function GetShopData()
+    local AvailableSeeds = {}
 
-    -- 1. Scan Player Gui (Text labels & Shop frames)
+    -- 1. Quét từ Folder Shop/Merchant trong ReplicatedStorage (Server Data chính xác nhất)
+    local ShopFolder = ReplicatedStorage:FindFirstChild("Merchant") 
+                    or ReplicatedStorage:FindFirstChild("SeedMerchant") 
+                    or ReplicatedStorage:FindFirstChild("Shop")
+                    or workspace:FindFirstChild("Merchant")
+
+    if ShopFolder then
+        -- Lấy các item thực sự nằm trong danh sách bán hiện tại
+        local ItemsFolder = ShopFolder:FindFirstChild("Items") or ShopFolder:FindFirstChild("Stock") or ShopFolder
+        for _, item in ipairs(ItemsFolder:GetChildren()) do
+            local itemName = item.Name:lower()
+            -- Kiểm tra nếu item này không bị hết hàng (Stock > 0)
+            local stockVal = item:FindFirstChild("Stock") or item:FindFirstChild("Amount") or item:FindFirstChild("InStock")
+            local isAvailable = true
+            
+            if stockVal then
+                if typeof(stockVal.Value) == "number" and stockVal.Value <= 0 then
+                    isAvailable = false
+                elseif typeof(stockVal.Value) == "boolean" and not stockVal.Value then
+                    isAvailable = false
+                end
+            end
+
+            if isAvailable then
+                local priceVal = item:FindFirstChild("Price") or item:FindFirstChild("Cost")
+                local priceText = priceVal and ("$" .. tostring(priceVal.Value)) or "On Sale"
+                
+                for _, seed in ipairs(SeedList) do
+                    local sLower = seed:lower()
+                    if string.find(itemName, sLower) then
+                        AvailableSeeds[sLower] = priceText
+                    end
+                end
+            end
+        end
+    end
+
+    -- 2. Quét từ UI Shop thực tế trên màn hình (PlayerGui -> ShopFrame)
     local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if PlayerGui then
-        for _, v in ipairs(PlayerGui:GetDescendants()) do
-            if (v:IsA("TextLabel") or v:IsA("TextButton")) and v.Visible then
-                local txt = v.Text:lower()
-                for _, seed in ipairs(SeedList) do
-                    local sLower = seed:lower()
-                    if string.find(txt, sLower) then
-                        local price = string.match(txt, "%$%d+") or string.match(txt, "%d+") or "In Stock"
-                        StockData[sLower] = price
+        -- Tìm khung Shop UI duy nhất (Bỏ qua Inventory, Hotbar, Plots)
+        for _, gui in ipairs(PlayerGui:GetChildren()) do
+            local gName = gui.Name:lower()
+            if string.find(gName, "shop") or string.find(gName, "merchant") or string.find(gName, "seed") then
+                for _, element in ipairs(gui:GetDescendants()) do
+                    if element:IsA("TextLabel") or element:IsA("TextButton") then
+                        local txt = element.Text:lower()
+                        for _, seed in ipairs(SeedList) do
+                            local sLower = seed:lower()
+                            -- Chỉ chấp nhận nếu Text chứa tên Hạt Giống + có Giá tiền kèm theo ($)
+                            if string.find(txt, sLower) and (string.find(txt, "%$") or string.find(txt, "buy")) then
+                                local price = string.match(element.Text, "%$%d+") or string.match(element.Text, "%d+") or "On Sale"
+                                AvailableSeeds[sLower] = price
+                            end
+                        end
                     end
                 end
             end
         end
     end
 
-    -- 2. Scan ReplicatedStorage Data Folders
-    local TargetLocations = {
-        ReplicatedStorage,
-        ReplicatedStorage:FindFirstChild("Shop"),
-        ReplicatedStorage:FindFirstChild("Seeds"),
-        ReplicatedStorage:FindFirstChild("Merchant"),
-        workspace:FindFirstChild("Shop")
-    }
-
-    for _, folder in ipairs(TargetLocations) do
-        if folder then
-            for _, child in ipairs(folder:GetDescendants()) do
-                local cName = child.Name:lower()
-                for _, seed in ipairs(SeedList) do
-                    local sLower = seed:lower()
-                    if cName == sLower or string.find(cName, sLower) then
-                        local priceVal = child:FindFirstChild("Price") or child:FindFirstChild("Cost") or child:FindFirstChild("Value")
-                        local priceText = priceVal and ("$" .. tostring(priceVal.Value)) or "In Stock"
-                        StockData[sLower] = priceText
-                    end
-                end
-            end
-        end
-    end
-
-    return StockData
+    return AvailableSeeds
 end
 
 -- UPDATE UI FUNCTION
 local function RefreshShopStatus()
-    local CurrentStock = ScanShop()
+    local CurrentStock = GetShopData()
 
     for _, seed in ipairs(SeedList) do
         local key = seed:lower()
@@ -219,23 +238,23 @@ local function RefreshShopStatus()
 
         if CurrentStock[key] then
             label.Text = "💲 " .. tostring(CurrentStock[key])
-            label.TextColor3 = Color3.fromRGB(85, 255, 127) -- Green for In Stock
+            label.TextColor3 = Color3.fromRGB(85, 255, 127) -- Xanh lá cho On Stock
         else
             label.Text = "❌ Out of Stock"
-            label.TextColor3 = Color3.fromRGB(255, 60, 60) -- Red for Out of Stock
+            label.TextColor3 = Color3.fromRGB(255, 60, 60) -- Đỏ cho Out of Stock
         end
     end
 end
 
--- TIMED AUTO-CHECKER (EVERY 5 MINUTES: 00, 05, 10, 15...)
+-- AUTO CHECK EVERY 5 MINUTES (00, 05, 10, 15...)
 task.spawn(function()
-    RefreshShopStatus() -- Initial check on script load
+    RefreshShopStatus()
     
     while task.wait(1) do
         local now = os.date("*t")
         if now.min % 5 == 0 and now.sec == 0 then
             RefreshShopStatus()
-            task.wait(1) -- Avoid double triggers within the same second
+            task.wait(1)
         end
     end
 end)
