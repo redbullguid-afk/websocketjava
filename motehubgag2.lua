@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN - RAW SEED STOCK CHECKER ]] --
+-- [[ GROW A GARDEN - DIRECT SERVER HOOK CHECKER ]] --
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,13 +17,13 @@ local SeedList = {
 }
 
 -- Clear old UI
-if CoreGui:FindFirstChild("GardenCheckerFinal") then
-    CoreGui.GardenCheckerFinal:Destroy()
+if CoreGui:FindFirstChild("GardenCheckerDirect") then
+    CoreGui.GardenCheckerDirect:Destroy()
 end
 
 -- MAIN GUI
 local GardenGui = Instance.new("ScreenGui")
-GardenGui.Name = "GardenCheckerFinal"
+GardenGui.Name = "GardenCheckerDirect"
 GardenGui.Parent = CoreGui
 GardenGui.ResetOnSpawn = false
 
@@ -49,7 +49,7 @@ ToggleCorner.Parent = ToggleBtn
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Parent = GardenGui
-MainFrame.Size = UDim2.new(0, 420, 0, 380)
+MainFrame.Size = UDim2.new(0, 420, 0, 390)
 MainFrame.Position = UDim2.new(0.3, 0, 0.25, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.Visible = false
@@ -74,7 +74,7 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 10)
 TitleCorner.Parent = Title
 
--- TAB BAR (TAB 1: INFO)
+-- TAB BAR & REFRESH BUTTON
 local TabBar = Instance.new("Frame")
 TabBar.Parent = MainFrame
 TabBar.Position = UDim2.new(0, 10, 0, 45)
@@ -93,6 +93,20 @@ Tab1Btn.TextSize = 14
 local TabCorner = Instance.new("UICorner")
 TabCorner.CornerRadius = UDim.new(0, 5)
 TabCorner.Parent = Tab1Btn
+
+local RefreshBtn = Instance.new("TextButton")
+RefreshBtn.Parent = TabBar
+RefreshBtn.Position = UDim2.new(1, -110, 0, 0)
+RefreshBtn.Size = UDim2.new(0, 110, 1, 0)
+RefreshBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 90)
+RefreshBtn.Text = "🔄 Refresh"
+RefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+RefreshBtn.Font = Enum.Font.SourceSansBold
+RefreshBtn.TextSize = 14
+
+local RefCorner = Instance.new("UICorner")
+RefCorner.CornerRadius = UDim.new(0, 5)
+RefCorner.Parent = RefreshBtn
 
 -- SCROLLING FRAME
 local ScrollFrame = Instance.new("ScrollingFrame")
@@ -160,100 +174,86 @@ for i, seedName in ipairs(SeedList) do
     SeedRows[seedName:lower()] = StatusLabel
 end
 
--- THU THẬP DỮ LIỆU BÁN HÀNG BẰNG CÁC PHƯƠNG PHÁP RAW
-local CacheStock = {}
+-- TRUY VẤN DỮ LIỆU CHÍNH XÁC (FETCH SHOP DATA)
+local function FetchActiveShop()
+    local StockMap = {}
 
-local function ScanRawGameData()
-    local FoundItems = {}
-
-    -- 1. Quét sâu toàn bộ ReplicatedStorage cho các Value/String chứa thông tin Hạt
-    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        local oName = obj.Name:lower()
-        for _, seed in ipairs(SeedList) do
-            local sLower = seed:lower()
-            if string.find(oName, sLower) then
-                -- Kiểm tra nếu obj là StringValue / NumberValue hay Table
-                local price = "On Sale"
-                if obj:IsA("ValueBase") then
-                    price = "$" .. tostring(obj.Value)
-                elseif obj:FindFirstChild("Price") then
-                    price = "$" .. tostring(obj.Price.Value)
+    -- Phương pháp 1: Gọi RemoteFunction nếu game dùng Server Query
+    for _, rf in ipairs(ReplicatedStorage:GetDescendants()) do
+        if rf:IsA("RemoteFunction") and (string.find(rf.Name:lower(), "shop") or string.find(rf.Name:lower(), "get") or string.find(rf.Name:lower(), "merchant")) then
+            pcall(function()
+                local res = rf:InvokeServer("GetShop") or rf:InvokeServer()
+                if type(res) == "table" then
+                    for k, v in pairs(res) do
+                        local nameStr = (type(v) == "table" and (v.Name or v.Item)) or tostring(k)
+                        local priceStr = (type(v) == "table" and (v.Price or v.Cost)) or "In Stock"
+                        for _, seed in ipairs(SeedList) do
+                            local sLower = seed:lower()
+                            if string.find(nameStr:lower(), sLower) then
+                                StockMap[sLower] = type(priceStr) == "number" and ("$" .. priceStr) or priceStr
+                            end
+                        end
+                    end
                 end
-                FoundItems[sLower] = price
-            end
+            end)
         end
     end
 
-    -- 2. Quét trực tiếp các Text UI đang Active
+    -- Phương pháp 2: Quét trực tiếp các Text Elements trên PlayerGui khi mở NPC
     local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if PlayerGui then
-        for _, gui in ipairs(PlayerGui:GetDescendants()) do
-            if gui:IsA("TextLabel") and gui.Visible and gui.Text ~= "" then
-                local txt = gui.Text:lower()
+        for _, textObj in ipairs(PlayerGui:GetDescendants()) do
+            if textObj:IsA("TextLabel") or textObj:IsA("TextButton") then
+                local str = textObj.Text:lower()
                 for _, seed in ipairs(SeedList) do
                     local sLower = seed:lower()
-                    if string.find(txt, sLower) then
-                        local priceMatch = string.match(gui.Text, "%$%d+") or string.match(gui.Text, "%d+")
-                        FoundItems[sLower] = priceMatch and ("$" .. priceMatch) or "On Sale"
+                    if string.find(str, sLower) then
+                        -- Lấy giá tiền gần kề
+                        local priceMatch = string.match(textObj.Text, "%$%d+") or string.match(textObj.Text, "%d+")
+                        if priceMatch then
+                            StockMap[sLower] = "$" .. priceMatch
+                        else
+                            StockMap[sLower] = "In Stock"
+                        end
                     end
                 end
             end
         end
     end
 
-    return FoundItems
+    return StockMap
 end
 
--- UPDATE FUNCTION
-local function RefreshStatus()
-    local CurrentStock = ScanRawGameData()
+-- UPDATE UI FUNCTION
+local function RefreshUI()
+    RefreshBtn.Text = "⏳ Checking..."
+    local Stock = FetchActiveShop()
 
     for _, seed in ipairs(SeedList) do
         local key = seed:lower()
         local label = SeedRows[key]
 
-        if CurrentStock[key] or CacheStock[key] then
-            local priceVal = CurrentStock[key] or CacheStock[key]
-            label.Text = "💲 " .. tostring(priceVal)
-            label.TextColor3 = Color3.fromRGB(85, 255, 127) -- Xanh lá
+        if Stock[key] then
+            label.Text = "💲 " .. tostring(Stock[key])
+            label.TextColor3 = Color3.fromRGB(85, 255, 127)
         else
             label.Text = "❌ Out of Stock"
-            label.TextColor3 = Color3.fromRGB(255, 60, 60) -- Đỏ
+            label.TextColor3 = Color3.fromRGB(255, 60, 60)
         end
     end
+    RefreshBtn.Text = "🔄 Refresh"
 end
 
--- TỰ ĐỘNG CHẮN BẮT GÓI TIN DỮ LIỆU SHOP SERVER (REMOTE LISTENER)
-for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
-    if remote:IsA("RemoteEvent") then
-        remote.OnClientEvent:Connect(function(...)
-            local args = {...}
-            for _, arg in ipairs(args) do
-                if type(arg) == "table" then
-                    for k, v in pairs(arg) do
-                        local nameStr = tostring(k):lower() .. " " .. tostring(v):lower()
-                        for _, seed in ipairs(SeedList) do
-                            local sLower = seed:lower()
-                            if string.find(nameStr, sLower) then
-                                CacheStock[sLower] = "In Stock"
-                            end
-                        end
-                    end
-                end
-            end
-            RefreshStatus()
-        end)
-    end
-end
+-- BUTTON CLICK EVENT
+RefreshBtn.MouseButton1Click:Connect(RefreshUI)
 
--- AUTO RUN & AUTO CHECK EVERY 5 MINS (00, 05, 10, 15...)
+-- AUTO RUN & TIMED CHECK (EVERY 5 MINS)
 task.spawn(function()
-    RefreshStatus()
-    
+    RefreshUI()
     while task.wait(1) do
         local now = os.date("*t")
         if now.min % 5 == 0 and now.sec == 0 then
-            RefreshStatus()
+            RefreshUI()
             task.wait(1)
         end
     end
