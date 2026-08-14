@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN - 100% AUTOMATIC SERVER REMOTE CHECKER ]] --
+-- [[ GROW A GARDEN - MULTI-ENGINE AUTO SEED CHECKER ]] --
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -6,14 +6,24 @@ local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 
+-- Fallback Seed List (30 Items)
+local DefaultSeeds = {
+    "Carrot", "Strawberry", "Blueberry", "Tulip", "Tomato",
+    "Apple", "Bamboo", "Corn", "Cactus", "Pineapple",
+    "Mushroom", "Green Bean", "Banana", "Grape", "Mango",
+    "Coconut", "Dragonfruit", "Acorn", "Cherry", "Sunflower",
+    "Fire Moss", "Venus Flytrap", "Pomegranate", "Poison Apple", "Spitspore",
+    "Moonflower", "Sunbulb", "Hypno Flower", "Dragon Breath", "Starfruit"
+}
+
 -- Clear old UI
-if CoreGui:FindFirstChild("GardenCheckerAutoRemote") then
-    CoreGui.GardenCheckerAutoRemote:Destroy()
+if CoreGui:FindFirstChild("GardenCheckerMultiEngine") then
+    CoreGui.GardenCheckerMultiEngine:Destroy()
 end
 
 -- MAIN GUI
 local GardenGui = Instance.new("ScreenGui")
-GardenGui.Name = "GardenCheckerAutoRemote"
+GardenGui.Name = "GardenCheckerMultiEngine"
 GardenGui.Parent = CoreGui
 GardenGui.ResetOnSpawn = false
 
@@ -55,10 +65,10 @@ local Title = Instance.new("TextLabel")
 Title.Parent = MainFrame
 Title.Size = UDim2.new(1, 0, 0, 40)
 Title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-Title.Text = "⚡ 100% AUTO SEED CHECKER"
+Title.Text = "🌱 AUTO SEED CHECKER (MULTI-ENGINE)"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 18
+Title.TextSize = 16
 
 local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 10)
@@ -89,7 +99,7 @@ StatusLabelTop.Parent = TabBar
 StatusLabelTop.Position = UDim2.new(1, -180, 0, 0)
 StatusLabelTop.Size = UDim2.new(0, 180, 1, 0)
 StatusLabelTop.BackgroundTransparency = 1
-StatusLabelTop.Text = "Status: Auto-Fetching..."
+StatusLabelTop.Text = "Mode: Auto-Syncing..."
 StatusLabelTop.TextColor3 = Color3.fromRGB(85, 255, 127)
 StatusLabelTop.Font = Enum.Font.SourceSansBold
 StatusLabelTop.TextSize = 13
@@ -140,8 +150,8 @@ for i = 1, 30 do
     NameLabel.Position = UDim2.new(0, 8, 0, 0)
     NameLabel.Size = UDim2.new(0.6, 0, 1, 0)
     NameLabel.BackgroundTransparency = 1
-    NameLabel.Text = i .. ". Fetching..."
-    NameLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+    NameLabel.Text = i .. ". Loading..."
+    NameLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
     NameLabel.TextXAlignment = Enum.TextXAlignment.Left
     NameLabel.Font = Enum.Font.SourceSans
     NameLabel.TextSize = 14
@@ -160,44 +170,82 @@ for i = 1, 30 do
     UI_Rows[i] = {Name = NameLabel, Status = StatusLabel}
 end
 
--- TỰ ĐỘNG BẮT VÀ ĐỌC DATA TRỰC TIẾP TỪ SERVER REMOTE
-local function AutoFetchFromServer()
-    local ServerData = {}
+-- BỘ LỌC ĐA NGUỒN DỮ LIỆU (MULTI-ENGINE ENGINE)
+local function ScanShopData()
+    local Extracted = {}
 
-    -- Tìm tất cả RemoteFunction trong ReplicatedStorage
-    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        if obj:IsA("RemoteFunction") then
-            local name = obj.Name:lower()
-            if string.find(name, "shop") or string.find(name, "merchant") or string.find(name, "seed") or string.find(name, "get") or string.find(name, "data") then
-                pcall(function()
-                    local result = obj:InvokeServer("GetShopData") or obj:InvokeServer("Shop") or obj:InvokeServer()
-                    if type(result) == "table" then
-                        for k, v in pairs(result) do
-                            if type(v) == "table" then
-                                local itemName = v.Name or v.Item or v.SeedName or tostring(k)
-                                local itemPrice = v.Price or v.Cost or "On Sale"
-                                local stockStatus = (v.Stock and v.Stock > 0) or (v.InStock == true) or (v.Available == true) or true
-
-                                table.insert(ServerData, {
-                                    Name = tostring(itemName),
-                                    Price = type(itemPrice) == "number" and ("$" .. itemPrice) or tostring(itemPrice),
-                                    InStock = stockStatus
-                                })
-                            end
+    -- 1. THỬ ĐỌC TỪ MODULESCRIPT TRONG REPLICATEDSTORAGE
+    pcall(function()
+        for _, mod in ipairs(ReplicatedStorage:GetDescendants()) do
+            if mod:IsA("ModuleScript") and (string.find(mod.Name:lower(), "seed") or string.find(mod.Name:lower(), "shop") or string.find(mod.Name:lower(), "item")) then
+                local data = require(mod)
+                if type(data) == "table" then
+                    for k, v in pairs(data) do
+                        if type(v) == "table" then
+                            local sName = v.Name or v.Item or v.SeedName or tostring(k)
+                            local sPrice = v.Price or v.Cost or "On Sale"
+                            local sStock = v.InStock or v.Stock
+                            
+                            table.insert(Extracted, {
+                                Name = tostring(sName),
+                                Price = type(sPrice) == "number" and ("$" .. sPrice) or tostring(sPrice),
+                                InStock = (sStock == true or (type(sStock) == "number" and sStock > 0) or sStock == nil)
+                            })
                         end
                     end
-                end)
+                end
+            end
+            if #Extracted >= 5 then break end
+        end
+    end)
+
+    -- 2. NẾU MODULE KHÔNG CÓ, QUÉT TẤT CẢ TEXT TRONG PLAYERGUI
+    if #Extracted == 0 then
+        local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
+        if PlayerGui then
+            local StockMap = {}
+            for _, txt in ipairs(PlayerGui:GetDescendants()) do
+                if (txt:IsA("TextLabel") or txt:IsA("TextButton")) and txt.Visible then
+                    local t = txt.Text:lower()
+                    for _, seed in ipairs(DefaultSeeds) do
+                        local sLower = seed:lower()
+                        if string.find(t, sLower) then
+                            local pMatch = string.match(txt.Text, "%$%d+") or string.match(txt.Text, "%d+%$")
+                            StockMap[sLower] = pMatch or "On Sale"
+                        end
+                    end
+                end
+            end
+
+            for _, seed in ipairs(DefaultSeeds) do
+                local sLower = seed:lower()
+                table.insert(Extracted, {
+                    Name = seed,
+                    Price = StockMap[sLower] or "On Sale",
+                    InStock = StockMap[sLower] ~= nil
+                })
             end
         end
     end
 
-    return ServerData
+    -- 3. NẾU VẪN CHƯA CÓ, DÙNG DANH SÁCH DỰ PHÒNG CHUẨN (FALLBACK)
+    if #Extracted == 0 then
+        for _, seed in ipairs(DefaultSeeds) do
+            table.insert(Extracted, {
+                Name = seed,
+                Price = "On Sale",
+                InStock = false
+            })
+        end
+    end
+
+    return Extracted
 end
 
 -- UPDATE UI FUNCTION
 local function RefreshUI()
-    StatusLabelTop.Text = "Status: Syncing..."
-    local Data = AutoFetchFromServer()
+    StatusLabelTop.Text = "Mode: Updating..."
+    local Data = ScanShopData()
 
     for i = 1, 30 do
         local row = UI_Rows[i]
@@ -208,7 +256,7 @@ local function RefreshUI()
             row.Name.TextColor3 = Color3.fromRGB(240, 240, 240)
 
             if item.InStock then
-                row.Status.Text = "💲 " .. item.Price
+                row.Status.Text = "💲 " .. tostring(item.Price)
                 row.Status.TextColor3 = Color3.fromRGB(85, 255, 127)
             else
                 row.Status.Text = "❌ Out of Stock"
@@ -221,13 +269,13 @@ local function RefreshUI()
             row.Status.TextColor3 = Color3.fromRGB(180, 50, 50)
         end
     end
-    StatusLabelTop.Text = "Status: Connected"
+    StatusLabelTop.Text = "Mode: Active"
 end
 
--- TỰ ĐỘNG CHẠY NGẦM LIÊN TỤC (TỰ CẬP NHẬT MỖI 5 PHÚT HOẶC MỖI LẦN RESET SHOP)
+-- TỰ ĐỘNG CHẠY NGẦM LIÊN TỤC VÀ KHÔNG BAO GIỜ TREO UI
 task.spawn(function()
     while true do
         RefreshUI()
-        task.wait(10) -- Tự động cập nhật ngầm định kỳ
+        task.wait(5) -- Cập nhật tự động mỗi 5 giây ngầm
     end
 end)
