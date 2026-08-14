@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN - FIXED GARDEN CENTER AUTO HARVEST ]] --
+-- [[ GROW A GARDEN 2 - FIXED SPAWN PET & HARVEST ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -157,14 +157,14 @@ local isAutoPet = false
 local isAutoHarvest = false
 local GardenCenterPos = nil -- Tọa độ gốc Vườn nhà bạn
 
-CreateToggleSwitch(MainFrame, "AUTO PET (10s)", 20, function(state)
+CreateToggleSwitch(MainFrame, "AUTO PET (12s)", 20, function(state)
     isAutoPet = state
 end)
 
 CreateToggleSwitch(MainFrame, "AUTO HARVEST", 190, function(state)
     isAutoHarvest = state
     
-    -- Khi vừa BẬT Auto Harvest -> Tự động lưu vị trí đứng hiện tại làm Tâm Vườn!
+    -- Lưu vị trí nhân vật làm Tâm Vườn khi BẬT Auto Harvest
     if state then
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -175,10 +175,10 @@ CreateToggleSwitch(MainFrame, "AUTO HARVEST", 190, function(state)
 end)
 
 -- ==========================================
--- 🐾 LOGIC 1: AUTO BUY PET (10S COOLDOWN)
+-- 🐾 LOGIC 1: AUTO PICK SPAWNED PET (CHÍNH XÁC PET MAP)
 -- ==========================================
 
-local COOLDOWN_PET = 10
+local COOLDOWN_PET = 12
 
 local function ForceTouchPet(petPart)
     local char = LocalPlayer.Character
@@ -207,36 +207,47 @@ end
 task.spawn(function()
     while true do
         if isAutoPet then
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            pcall(function()
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
-            if hrp then
-                local targetPet = nil
-                for _, obj in ipairs(Workspace:GetDescendants()) do
-                    if obj:IsA("Model") and string.find(obj.Name:lower(), "pet") and not string.find(obj.Name:lower(), "egg") then
-                        if not Players:GetPlayerFromCharacter(obj) then
-                            targetPet = obj
-                            break
+                if hrp then
+                    local targetPet = nil
+                    
+                    -- Dò tìm Pet thực sự đang Spawn trên Bản đồ
+                    for _, obj in ipairs(Workspace:GetDescendants()) do
+                        if obj:IsA("Model") and string.find(obj.Name:lower(), "pet") and not string.find(obj.Name:lower(), "egg") then
+                            -- Bỏ qua nếu là Pet thuộc nhân vật người chơi khác
+                            if not Players:GetPlayerFromCharacter(obj) then
+                                -- BẮT BỘC phải có ProximityPrompt mới tính là Pet vừa Spawn!
+                                local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+                                if prompt and prompt.Enabled then
+                                    targetPet = obj
+                                    break
+                                end
+                            end
+                        end
+                    end
+
+                    if targetPet then
+                        local targetPart = targetPet:IsA("BasePart") and targetPet or targetPet:FindFirstChildWhichIsA("BasePart", true)
+
+                        if targetPart then
+                            -- Dịch chuyển nhân vật đến chỗ Pet Spawn
+                            hrp.CFrame = targetPart.CFrame * CFrame.new(0, 1.5, 0)
+                            task.wait(0.3) -- Nghỉ ngắn để Server cập nhật tọa độ chống nghẽn
+                            
+                            local startTime = tick()
+                            while tick() - startTime < 0.8 do
+                                ForceTouchPet(targetPart)
+                                task.wait(0.1)
+                            end
+
+                            task.wait(COOLDOWN_PET)
                         end
                     end
                 end
-
-                if targetPet then
-                    local targetPart = targetPet:IsA("BasePart") and targetPet or targetPet:FindFirstChildWhichIsA("BasePart", true)
-
-                    if targetPart then
-                        hrp.CFrame = targetPart.CFrame * CFrame.new(0, 1, 0)
-                        
-                        local startTime = tick()
-                        while tick() - startTime < 0.8 do
-                            ForceTouchPet(targetPart)
-                            task.wait(0.1)
-                        end
-
-                        task.wait(COOLDOWN_PET)
-                    end
-                end
-            end
+            end)
         end
         task.wait(1)
     end
@@ -247,7 +258,7 @@ end)
 -- ==========================================
 
 local function IsPlayerObject(obj)
-    -- Kiểm tra xem nút bấm có thuộc về bất kỳ Người Chơi nào không
+    -- Lọc bỏ nút bấm trên nhân vật Người Chơi khác
     for _, player in ipairs(Players:GetPlayers()) do
         if player.Character and obj:IsDescendantOf(player.Character) then
             return true
@@ -278,7 +289,7 @@ local function TriggerCropPrompt(prompt, hrp)
     end
 end
 
--- Vòng lặp thu hoạch
+-- Vòng lặp thu hoạch tự động
 task.spawn(function()
     while true do
         if isAutoHarvest and GardenCenterPos then
@@ -286,19 +297,15 @@ task.spawn(function()
                 local char = LocalPlayer.Character
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
-                -- Quét tất cả ProximityPrompt
                 for _, prompt in ipairs(Workspace:GetDescendants()) do
                     if prompt:IsA("ProximityPrompt") and prompt.Enabled then
                         local targetPart = prompt.Parent
                         
-                        -- Lọc BỎ hoàn toàn nút tương tác trên Người Chơi
+                        -- Chỉ thu hoạch vật thể không phải người chơi & nằm trong phạm vi 50 studs của Vườn
                         if targetPart and not IsPlayerObject(targetPart) then
                             local pos = targetPart:IsA("BasePart") and targetPart.Position or targetPart:GetPivot().Position
-                            
-                            -- So sánh khoảng cách dựa trên TÂM VƯỜN ĐÃ GHIM (GardenCenterPos)
                             local distanceToGarden = (GardenCenterPos - pos).Magnitude
 
-                            -- Chỉ thu hoạch vật thể nằm trong phạm vi 50 studs tính từ Tâm Vườn
                             if distanceToGarden <= 50 then
                                 TriggerCropPrompt(prompt, hrp)
                             end
