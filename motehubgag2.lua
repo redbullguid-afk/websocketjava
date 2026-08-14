@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN - AUTO PET WITH SIMPLE COOLDOWN ]] --
+-- [[ GROW A GARDEN - AUTO PET (10S COOLDOWN) ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -7,13 +7,13 @@ local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
 -- Clear UI cũ
-if CoreGui:FindFirstChild("CooldownPetBuyerGui") then
-    CoreGui.CooldownPetBuyerGui:Destroy()
+if CoreGui:FindFirstChild("Cooldown10sPetBuyerGui") then
+    CoreGui.Cooldown10sPetBuyerGui:Destroy()
 end
 
 -- TẠO UI BẬT / TẮT
 local Gui = Instance.new("ScreenGui")
-Gui.Name = "CooldownPetBuyerGui"
+Gui.Name = "Cooldown10sPetBuyerGui"
 Gui.Parent = CoreGui
 
 local ToggleBtn = Instance.new("TextButton")
@@ -33,7 +33,7 @@ UICorner.CornerRadius = UDim.new(0, 8)
 UICorner.Parent = ToggleBtn
 
 local isAutoEnabled = false
-local COOLDOWN_TIME = 3.5 -- Thời gian nghỉ giữa mỗi lần mua (3 - 4 giây)
+local COOLDOWN_TIME = 10 -- Thời gian nghỉ giữa mỗi lần mua (10 giây)
 
 ToggleBtn.MouseButton1Click:Connect(function()
     isAutoEnabled = not isAutoEnabled
@@ -71,7 +71,7 @@ local function ForceTouchPet(petPart)
     end
 end
 
--- QUÉT VÀ MUA PET THEO CHU KỲ NGHỈ
+-- QUÉT VÀ MUA PET THEO CHU KỲ NGHỈ 10S
 task.spawn(function()
     while true do
         if isAutoEnabled then
@@ -106,7 +106,7 @@ task.spawn(function()
                             task.wait(0.1)
                         end
 
-                        -- 2. TẠM DỪNG 3.5 GIÂY (Tránh dịch chuyển liên tục)
+                        -- 2. TẠM DỪNG ĐÚNG 10 GIÂY
                         task.wait(COOLDOWN_TIME)
                     end
                 end
