@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN 2 - FIXED SPAWN PET & HARVEST ]] --
+-- [[ GROW A GARDEN 2 - HARVEST ONLY & NO CONFLICT ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -155,6 +155,7 @@ end
 
 local isAutoPet = false
 local isAutoHarvest = false
+local isBusyPet = false -- Cờ đánh dấu khi đang nhặt Pet để khóa Auto Harvest tạm thời
 local GardenCenterPos = nil -- Tọa độ gốc Vườn nhà bạn
 
 CreateToggleSwitch(MainFrame, "AUTO PET (12s)", 20, function(state)
@@ -175,7 +176,7 @@ CreateToggleSwitch(MainFrame, "AUTO HARVEST", 190, function(state)
 end)
 
 -- ==========================================
--- 🐾 LOGIC 1: AUTO PICK SPAWNED PET (CHÍNH XÁC PET MAP)
+-- 🐾 LOGIC 1: AUTO PICK SPAWNED PET
 -- ==========================================
 
 local COOLDOWN_PET = 12
@@ -213,13 +214,9 @@ task.spawn(function()
 
                 if hrp then
                     local targetPet = nil
-                    
-                    -- Dò tìm Pet thực sự đang Spawn trên Bản đồ
                     for _, obj in ipairs(Workspace:GetDescendants()) do
                         if obj:IsA("Model") and string.find(obj.Name:lower(), "pet") and not string.find(obj.Name:lower(), "egg") then
-                            -- Bỏ qua nếu là Pet thuộc nhân vật người chơi khác
                             if not Players:GetPlayerFromCharacter(obj) then
-                                -- BẮT BỘC phải có ProximityPrompt mới tính là Pet vừa Spawn!
                                 local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
                                 if prompt and prompt.Enabled then
                                     targetPet = obj
@@ -233,15 +230,29 @@ task.spawn(function()
                         local targetPart = targetPet:IsA("BasePart") and targetPet or targetPet:FindFirstChildWhichIsA("BasePart", true)
 
                         if targetPart then
-                            -- Dịch chuyển nhân vật đến chỗ Pet Spawn
+                            -- Bật cờ bận: Tạm dừng Auto Harvest để tránh xung đột
+                            isBusyPet = true
+                            
+                            local oldCFrame = hrp.CFrame -- Lưu vị trí cũ
+                            
+                            -- Dịch chuyển tới nhặt Pet
                             hrp.CFrame = targetPart.CFrame * CFrame.new(0, 1.5, 0)
-                            task.wait(0.3) -- Nghỉ ngắn để Server cập nhật tọa độ chống nghẽn
+                            task.wait(0.3)
                             
                             local startTime = tick()
                             while tick() - startTime < 0.8 do
                                 ForceTouchPet(targetPart)
                                 task.wait(0.1)
                             end
+
+                            -- Quay về vị trí cũ (nếu có)
+                            if oldCFrame then
+                                hrp.CFrame = oldCFrame
+                            end
+                            
+                            -- Mở khóa Auto Harvest
+                            task.wait(0.2)
+                            isBusyPet = false
 
                             task.wait(COOLDOWN_PET)
                         end
@@ -254,16 +265,28 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 🌾 LOGIC 2: AUTO HARVEST CỐ ĐỊNH VƯỜN NHÀ
+-- 🌾 LOGIC 2: AUTO HARVEST (CHỈ CHỮ "HARVEST" & CHỐNG XUNG ĐỘT)
 -- ==========================================
 
 local function IsPlayerObject(obj)
-    -- Lọc bỏ nút bấm trên nhân vật Người Chơi khác
     for _, player in ipairs(Players:GetPlayers()) do
         if player.Character and obj:IsDescendantOf(player.Character) then
             return true
         end
     end
+    return false
+end
+
+-- Kiểm tra CHÍNH XÁC chỉ bấm nút có chứa duy nhất chữ "harvest"
+local function IsHarvestPrompt(prompt)
+    local actionText = prompt.ActionText:lower()
+    local objectText = prompt.ObjectText:lower()
+    
+    -- Chỉ chấp nhận nếu có chữ "harvest"
+    if string.find(actionText, "harvest") or string.find(objectText, "harvest") then
+        return true
+    end
+    
     return false
 end
 
@@ -292,22 +315,28 @@ end
 -- Vòng lặp thu hoạch tự động
 task.spawn(function()
     while true do
-        if isAutoHarvest and GardenCenterPos then
+        -- Chỉ chạy khi bật Auto Harvest VÀ KHÔNG BẬN mua Pet
+        if isAutoHarvest and GardenCenterPos and not isBusyPet then
             pcall(function()
                 local char = LocalPlayer.Character
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
-                for _, prompt in ipairs(Workspace:GetDescendants()) do
-                    if prompt:IsA("ProximityPrompt") and prompt.Enabled then
-                        local targetPart = prompt.Parent
+                if hrp then
+                    for _, prompt in ipairs(Workspace:GetDescendants()) do
+                        -- Nếu trong quá trình đang quét cây mà Auto Pet nhảy vào kích hoạt -> Thoát ngay lập tức
+                        if isBusyPet then break end
                         
-                        -- Chỉ thu hoạch vật thể không phải người chơi & nằm trong phạm vi 50 studs của Vườn
-                        if targetPart and not IsPlayerObject(targetPart) then
-                            local pos = targetPart:IsA("BasePart") and targetPart.Position or targetPart:GetPivot().Position
-                            local distanceToGarden = (GardenCenterPos - pos).Magnitude
+                        if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                            local targetPart = prompt.Parent
+                            
+                            -- Chỉ thu hoạch nếu CHÍNH XÁC là nút Harvest & trong bán kính 100 studs tính từ Tâm Vườn
+                            if targetPart and not IsPlayerObject(targetPart) and IsHarvestPrompt(prompt) then
+                                local pos = targetPart:IsA("BasePart") and targetPart.Position or targetPart:GetPivot().Position
+                                local distanceToGarden = (GardenCenterPos - pos).Magnitude
 
-                            if distanceToGarden <= 50 then
-                                TriggerCropPrompt(prompt, hrp)
+                                if distanceToGarden <= 100 then
+                                    TriggerCropPrompt(prompt, hrp)
+                                end
                             end
                         end
                     end
