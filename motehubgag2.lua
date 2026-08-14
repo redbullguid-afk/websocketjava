@@ -1,58 +1,33 @@
--- [[ GROW A GARDEN - SEED CHECKER SCRIPT (DELTA EXECUTOR) ]] --
+-- [[ GROW A GARDEN - ALL ENGLISH SEED CHECKER SCRIPT ]] --
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Danh sách 30 hạt giống (Tên hiển thị Tiếng Việt => Tên trong Game Tiếng Anh)
+-- English Seed List (30 Items)
 local SeedList = {
-    {vn = "1. Cà rốt", en = "Carrot"},
-    {vn = "2. Dâu tây", en = "Strawberry"},
-    {vn = "3. Việt quất", en = "Blueberry"},
-    {vn = "4. Hoa tulip", en = "Tulip"},
-    {vn = "5. Cà chua", en = "Tomato"},
-    {vn = "6. Táo", en = "Apple"},
-    {vn = "7. Tre", en = "Bamboo"},
-    {vn = "8. Ngô", en = "Corn"},
-    {vn = "9. Xương rồng", en = "Cactus"},
-    {vn = "10. Dứa", en = "Pineapple"},
-    {vn = "11. Nấm", en = "Mushroom"},
-    {vn = "12. Đậu xanh", en = "Green Bean"},
-    {vn = "13. Chuối", en = "Banana"},
-    {vn = "14. Nho", en = "Grape"},
-    {vn = "15. Xoài", en = "Mango"},
-    {vn = "16. Dừa", en = "Coconut"},
-    {vn = "17. Quả rồng", en = "Dragonfruit"},
-    {vn = "18. Quả sồi", en = "Acorn"},
-    {vn = "19. Anh đào", en = "Cherry"},
-    {vn = "20. Hoa hướng dương", en = "Sunflower"},
-    {vn = "21. Rêu lửa", en = "Fire Moss"},
-    {vn = "22. Bẫy ruồi sao kim", en = "Venus Flytrap"},
-    {vn = "23. Lựu", en = "Pomegranate"},
-    {vn = "24. Quả táo độc", en = "Poison Apple"},
-    {vn = "25. Phun nòng độc", en = "Spitspore"},
-    {vn = "26. Hoa trăng", en = "Moonflower"},
-    {vn = "27. Hoa nắng", en = "Sunflower"},
-    {vn = "28. Hoa nở thôi miên", en = "Hypno Flower"},
-    {vn = "29. Hơi thở của rồng", en = "Dragon Breath"},
-    {vn = "30. Trái cây sao", en = "Starfruit"}
+    "Carrot", "Strawberry", "Blueberry", "Tulip", "Tomato",
+    "Apple", "Bamboo", "Corn", "Cactus", "Pineapple",
+    "Mushroom", "Green Bean", "Banana", "Grape", "Mango",
+    "Coconut", "Dragonfruit", "Acorn", "Cherry", "Sunflower",
+    "Fire Moss", "Venus Flytrap", "Pomegranate", "Poison Apple", "Spitspore",
+    "Moonflower", "Sunbulb", "Hypno Flower", "Dragon Breath", "Starfruit"
 }
 
--- Xóa ScreenGui cũ nếu có
-if CoreGui:FindFirstChild("GardenCheckerGui") then
-    CoreGui.GardenCheckerGui:Destroy()
+-- Clear old UI if exists
+if CoreGui:FindFirstChild("GardenCheckerEn") then
+    CoreGui.GardenCheckerEn:Destroy()
 end
 
--- TẠO UI CHÍNH
+-- MAIN GUI
 local GardenGui = Instance.new("ScreenGui")
-GardenGui.Name = "GardenCheckerGui"
+GardenGui.Name = "GardenCheckerEn"
 GardenGui.Parent = CoreGui
 GardenGui.ResetOnSpawn = false
 
--- NÚT NẰM NGANG BẬT/TẮT MENU (TOGGLE BUTTON)
+-- TOGGLE BUTTON (HORIZONTAL DESIGN)
 local ToggleBtn = Instance.new("TextButton")
 ToggleBtn.Name = "ToggleButton"
 ToggleBtn.Parent = GardenGui
@@ -64,13 +39,13 @@ ToggleBtn.TextColor3 = Color3.fromRGB(255, 85, 85)
 ToggleBtn.Font = Enum.Font.SourceSansBold
 ToggleBtn.TextSize = 16
 ToggleBtn.Active = true
-ToggleBtn.Draggable = true -- Cho phép kéo thả nút
+ToggleBtn.Draggable = true
 
 local ToggleCorner = Instance.new("UICorner")
 ToggleCorner.CornerRadius = UDim.new(0, 8)
 ToggleCorner.Parent = ToggleBtn
 
--- KHUNG MENU CHÍNH
+-- MAIN FRAME
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Parent = GardenGui
@@ -85,7 +60,7 @@ local FrameCorner = Instance.new("UICorner")
 FrameCorner.CornerRadius = UDim.new(0, 10)
 FrameCorner.Parent = MainFrame
 
--- TIÊU ĐỀ MENU
+-- TITLE
 local Title = Instance.new("TextLabel")
 Title.Parent = MainFrame
 Title.Size = UDim2.new(1, 0, 0, 40)
@@ -99,7 +74,7 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 10)
 TitleCorner.Parent = Title
 
--- TẠO TAB (TAB 1: INFO)
+-- TAB BAR (TAB 1: INFO)
 local TabBar = Instance.new("Frame")
 TabBar.Parent = MainFrame
 TabBar.Position = UDim2.new(0, 10, 0, 45)
@@ -119,7 +94,7 @@ local TabCorner = Instance.new("UICorner")
 TabCorner.CornerRadius = UDim.new(0, 5)
 TabCorner.Parent = Tab1Btn
 
--- KHU VỰC DANH SÁCH (SCROLLING FRAME)
+-- SCROLLING FRAME
 local ScrollFrame = Instance.new("ScrollingFrame")
 ScrollFrame.Parent = MainFrame
 ScrollFrame.Position = UDim2.new(0, 10, 0, 85)
@@ -133,7 +108,7 @@ UIListLayout.Parent = ScrollFrame
 UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 UIListLayout.Padding = UDim.new(0, 4)
 
--- HÀM BẬT/TẮT MENU
+-- TOGGLE LOGIC
 local menuOpen = false
 ToggleBtn.MouseButton1Click:Connect(function()
     menuOpen = not menuOpen
@@ -147,10 +122,10 @@ ToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- TẠO DÒNG CHO TỪNG HẠT GIỐNG
+-- GENERATE LIST ROWS
 local SeedRows = {}
 
-for i, seed in ipairs(SeedList) do
+for i, seedName in ipairs(SeedList) do
     local Row = Instance.new("Frame")
     Row.Parent = ScrollFrame
     Row.Size = UDim2.new(1, -10, 0, 26)
@@ -165,7 +140,7 @@ for i, seed in ipairs(SeedList) do
     NameLabel.Position = UDim2.new(0, 8, 0, 0)
     NameLabel.Size = UDim2.new(0.6, 0, 1, 0)
     NameLabel.BackgroundTransparency = 1
-    NameLabel.Text = seed.vn .. " (" .. seed.en .. ")"
+    NameLabel.Text = i .. ". " .. seedName
     NameLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
     NameLabel.TextXAlignment = Enum.TextXAlignment.Left
     NameLabel.Font = Enum.Font.SourceSans
@@ -176,69 +151,91 @@ for i, seed in ipairs(SeedList) do
     StatusLabel.Position = UDim2.new(0.6, 0, 0, 0)
     StatusLabel.Size = UDim2.new(0.4, -8, 1, 0)
     StatusLabel.BackgroundTransparency = 1
-    StatusLabel.Text = "[ ❌ Out of Stock ]"
+    StatusLabel.Text = "❌ Out of Stock"
     StatusLabel.TextColor3 = Color3.fromRGB(255, 60, 60)
     StatusLabel.TextXAlignment = Enum.TextXAlignment.Right
     StatusLabel.Font = Enum.Font.SourceSansBold
     StatusLabel.TextSize = 14
 
-    SeedRows[seed.en] = StatusLabel
+    SeedRows[seedName:lower()] = StatusLabel
 end
 
--- HÀM CHECK CỬA HÀNG TRONG GAME
-local function CheckShopData()
-    -- Lấy Folder dữ liệu Cửa hàng (Được cấu hình tương thích với hầu hết Game Grow a Garden)
-    local ShopFolder = ReplicatedStorage:FindFirstChild("Shop") or ReplicatedStorage:FindFirstChild("SeedShop") or workspace:FindFirstChild("Shop")
-    
-    for _, seed in ipairs(SeedList) do
-        local label = SeedRows[seed.en]
-        local isAvailable = false
-        local price = 0
+-- ADVANCED MULTI-SCANNER FOR SHOP DATA
+local function ScanShop()
+    local StockData = {}
 
-        if ShopFolder then
-            local seedItem = ShopFolder:FindFirstChild(seed.en)
-            if seedItem then
-                -- Kiểm tra trạng thái On Stock & Giá
-                local inStockVal = seedItem:FindFirstChild("InStock") or seedItem:FindFirstChild("Stock")
-                local priceVal = seedItem:FindFirstChild("Price") or seedItem:FindFirstChild("Cost")
-
-                if priceVal then price = priceVal.Value end
-                if inStockVal then
-                    if typeof(inStockVal.Value) == "boolean" then
-                        isAvailable = inStockVal.Value
-                    elseif typeof(inStockVal.Value) == "number" then
-                        isAvailable = inStockVal.Value > 0
+    -- 1. Scan Player Gui (Text labels & Shop frames)
+    local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if PlayerGui then
+        for _, v in ipairs(PlayerGui:GetDescendants()) do
+            if (v:IsA("TextLabel") or v:IsA("TextButton")) and v.Visible then
+                local txt = v.Text:lower()
+                for _, seed in ipairs(SeedList) do
+                    local sLower = seed:lower()
+                    if string.find(txt, sLower) then
+                        local price = string.match(txt, "%$%d+") or string.match(txt, "%d+") or "In Stock"
+                        StockData[sLower] = price
                     end
-                else
-                    isAvailable = true -- Nếu tìm thấy item trong Shop
                 end
             end
         end
+    end
 
-        -- Cập nhật giao diện UI
-        if isAvailable then
-            label.Text = "💲 $" .. tostring(price)
-            label.TextColor3 = Color3.fromRGB(85, 255, 127) -- Xanh lá cây
+    -- 2. Scan ReplicatedStorage Data Folders
+    local TargetLocations = {
+        ReplicatedStorage,
+        ReplicatedStorage:FindFirstChild("Shop"),
+        ReplicatedStorage:FindFirstChild("Seeds"),
+        ReplicatedStorage:FindFirstChild("Merchant"),
+        workspace:FindFirstChild("Shop")
+    }
+
+    for _, folder in ipairs(TargetLocations) do
+        if folder then
+            for _, child in ipairs(folder:GetDescendants()) do
+                local cName = child.Name:lower()
+                for _, seed in ipairs(SeedList) do
+                    local sLower = seed:lower()
+                    if cName == sLower or string.find(cName, sLower) then
+                        local priceVal = child:FindFirstChild("Price") or child:FindFirstChild("Cost") or child:FindFirstChild("Value")
+                        local priceText = priceVal and ("$" .. tostring(priceVal.Value)) or "In Stock"
+                        StockData[sLower] = priceText
+                    end
+                end
+            end
+        end
+    end
+
+    return StockData
+end
+
+-- UPDATE UI FUNCTION
+local function RefreshShopStatus()
+    local CurrentStock = ScanShop()
+
+    for _, seed in ipairs(SeedList) do
+        local key = seed:lower()
+        local label = SeedRows[key]
+
+        if CurrentStock[key] then
+            label.Text = "💲 " .. tostring(CurrentStock[key])
+            label.TextColor3 = Color3.fromRGB(85, 255, 127) -- Green for In Stock
         else
             label.Text = "❌ Out of Stock"
-            label.TextColor3 = Color3.fromRGB(255, 60, 60) -- Đỏ
+            label.TextColor3 = Color3.fromRGB(255, 60, 60) -- Red for Out of Stock
         end
     end
 end
 
--- QUẢN LÝ THỜI GIAN RESET (CỨ 5 PHÚT MỘT LẦN: 00, 05, 10, 15...)
+-- TIMED AUTO-CHECKER (EVERY 5 MINUTES: 00, 05, 10, 15...)
 task.spawn(function()
-    CheckShopData() -- Check ngay khi bật script
+    RefreshShopStatus() -- Initial check on script load
     
     while task.wait(1) do
         local now = os.date("*t")
-        local minute = now.min
-        local second = now.sec
-        
-        -- Kiểm tra nếu phút chia hết cho 5 và giây bắt đầu bằng 0 (Đúng mốc thời gian reset)
-        if minute % 5 == 0 and second == 0 then
-            CheckShopData()
-            task.wait(1) -- Tránh bị lặp nhiều lần trong cùng 1 giây
+        if now.min % 5 == 0 and now.sec == 0 then
+            RefreshShopStatus()
+            task.wait(1) -- Avoid double triggers within the same second
         end
     end
 end)
