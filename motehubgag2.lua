@@ -1,17 +1,19 @@
--- [[ GROW A GARDEN - DYNAMIC AUTO SHOP DUMP ]] --
+-- [[ GROW A GARDEN - 100% AUTOMATIC SERVER REMOTE CHECKER ]] --
 
 local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local CoreGui = game:GetService("CoreGui")
+
 local LocalPlayer = Players.LocalPlayer
 
 -- Clear old UI
-if CoreGui:FindFirstChild("GardenCheckerDynamic") then
-    CoreGui.GardenCheckerDynamic:Destroy()
+if CoreGui:FindFirstChild("GardenCheckerAutoRemote") then
+    CoreGui.GardenCheckerAutoRemote:Destroy()
 end
 
 -- MAIN GUI
 local GardenGui = Instance.new("ScreenGui")
-GardenGui.Name = "GardenCheckerDynamic"
+GardenGui.Name = "GardenCheckerAutoRemote"
 GardenGui.Parent = CoreGui
 GardenGui.ResetOnSpawn = false
 
@@ -37,7 +39,7 @@ ToggleCorner.Parent = ToggleBtn
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
 MainFrame.Parent = GardenGui
-MainFrame.Size = UDim2.new(0, 420, 0, 400)
+MainFrame.Size = UDim2.new(0, 430, 0, 400)
 MainFrame.Position = UDim2.new(0.3, 0, 0.25, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 MainFrame.Visible = false
@@ -53,7 +55,7 @@ local Title = Instance.new("TextLabel")
 Title.Parent = MainFrame
 Title.Size = UDim2.new(1, 0, 0, 40)
 Title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-Title.Text = "🌱 AUTO SEED SHOP DUMP"
+Title.Text = "⚡ 100% AUTO SEED CHECKER"
 Title.TextColor3 = Color3.fromRGB(255, 255, 255)
 Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 18
@@ -62,7 +64,7 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 10)
 TitleCorner.Parent = Title
 
--- TAB BAR & REFRESH BUTTON
+-- TAB BAR & STATUS
 local TabBar = Instance.new("Frame")
 TabBar.Parent = MainFrame
 TabBar.Position = UDim2.new(0, 10, 0, 45)
@@ -82,19 +84,15 @@ local TabCorner = Instance.new("UICorner")
 TabCorner.CornerRadius = UDim.new(0, 5)
 TabCorner.Parent = Tab1Btn
 
-local RefreshBtn = Instance.new("TextButton")
-RefreshBtn.Parent = TabBar
-RefreshBtn.Position = UDim2.new(1, -110, 0, 0)
-RefreshBtn.Size = UDim2.new(0, 110, 1, 0)
-RefreshBtn.BackgroundColor3 = Color3.fromRGB(40, 160, 90)
-RefreshBtn.Text = "🔄 Scan Shop"
-RefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-RefreshBtn.Font = Enum.Font.SourceSansBold
-RefreshBtn.TextSize = 14
-
-local RefCorner = Instance.new("UICorner")
-RefCorner.CornerRadius = UDim.new(0, 5)
-RefCorner.Parent = RefreshBtn
+local StatusLabelTop = Instance.new("TextLabel")
+StatusLabelTop.Parent = TabBar
+StatusLabelTop.Position = UDim2.new(1, -180, 0, 0)
+StatusLabelTop.Size = UDim2.new(0, 180, 1, 0)
+StatusLabelTop.BackgroundTransparency = 1
+StatusLabelTop.Text = "Status: Auto-Fetching..."
+StatusLabelTop.TextColor3 = Color3.fromRGB(85, 255, 127)
+StatusLabelTop.Font = Enum.Font.SourceSansBold
+StatusLabelTop.TextSize = 13
 
 -- SCROLLING FRAME
 local ScrollFrame = Instance.new("ScrollingFrame")
@@ -102,7 +100,7 @@ ScrollFrame.Parent = MainFrame
 ScrollFrame.Position = UDim2.new(0, 10, 0, 85)
 ScrollFrame.Size = UDim2.new(1, -20, 1, -95)
 ScrollFrame.BackgroundTransparency = 1
-ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 30 * 30) -- Giới hạn 30 hàng
+ScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 30 * 28)
 ScrollFrame.ScrollBarThickness = 6
 
 local UIListLayout = Instance.new("UIListLayout")
@@ -124,7 +122,7 @@ ToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- TẠO SẴN 30 CẶP LABEL RỖNG
+-- CREATING 30 UI ROWS
 local UI_Rows = {}
 
 for i = 1, 30 do
@@ -142,7 +140,7 @@ for i = 1, 30 do
     NameLabel.Position = UDim2.new(0, 8, 0, 0)
     NameLabel.Size = UDim2.new(0.6, 0, 1, 0)
     NameLabel.BackgroundTransparency = 1
-    NameLabel.Text = i .. ". Empty Slot"
+    NameLabel.Text = i .. ". Fetching..."
     NameLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
     NameLabel.TextXAlignment = Enum.TextXAlignment.Left
     NameLabel.Font = Enum.Font.SourceSans
@@ -162,78 +160,44 @@ for i = 1, 30 do
     UI_Rows[i] = {Name = NameLabel, Status = StatusLabel}
 end
 
--- HÀM TỰ ĐỘNG BẮT DỮ LIỆU TỪ SHOP THỰC TẾ
-local function AutoScanShopData()
-    local ExtractedData = {}
-    local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not PlayerGui then return ExtractedData end
+-- TỰ ĐỘNG BẮT VÀ ĐỌC DATA TRỰC TIẾP TỪ SERVER REMOTE
+local function AutoFetchFromServer()
+    local ServerData = {}
 
-    -- Bỏ qua các UI cá nhân không phải Shop
-    local ExcludeList = {"inventory", "backpack", "codex", "journal", "index", "craft", "setting"}
+    -- Tìm tất cả RemoteFunction trong ReplicatedStorage
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteFunction") then
+            local name = obj.Name:lower()
+            if string.find(name, "shop") or string.find(name, "merchant") or string.find(name, "seed") or string.find(name, "get") or string.find(name, "data") then
+                pcall(function()
+                    local result = obj:InvokeServer("GetShopData") or obj:InvokeServer("Shop") or obj:InvokeServer()
+                    if type(result) == "table" then
+                        for k, v in pairs(result) do
+                            if type(v) == "table" then
+                                local itemName = v.Name or v.Item or v.SeedName or tostring(k)
+                                local itemPrice = v.Price or v.Cost or "On Sale"
+                                local stockStatus = (v.Stock and v.Stock > 0) or (v.InStock == true) or (v.Available == true) or true
 
-    for _, gui in ipairs(PlayerGui:GetChildren()) do
-        if gui:IsA("ScreenGui") and gui.Enabled then
-            local gName = gui.Name:lower()
-            local isExcluded = false
-            for _, ex in ipairs(ExcludeList) do
-                if string.find(gName, ex) then isExcluded = true break end
-            end
-
-            if not isExcluded then
-                -- Tìm các khung chứa hạt giống
-                for _, frame in ipairs(gui:GetDescendants()) do
-                    if frame:IsA("Frame") or frame:IsA("ImageLabel") or frame:IsA("TextButton") then
-                        local foundName = nil
-                        local foundPrice = nil
-                        local isAvailable = false
-
-                        -- Duyệt thuộc tính con bên trong khung
-                        for _, child in ipairs(frame:GetDescendants()) do
-                            if child:IsA("TextLabel") or child:IsA("TextButton") then
-                                local txt = child.Text
-                                local lowerTxt = txt:lower()
-
-                                -- Lấy tên (Chuỗi chữ không chứa số hay ký tự đặc biệt)
-                                if not string.find(txt, "%$") and not string.match(txt, "^%d+$") and #txt > 2 then
-                                    if not string.find(lowerTxt, "buy") and not string.find(lowerTxt, "stock") and not string.find(lowerTxt, "sold") then
-                                        foundName = txt
-                                    end
-                                end
-
-                                -- Lấy giá ($)
-                                local pMatch = string.match(txt, "%$%d+") or string.match(txt, "%d+%$")
-                                if pMatch then
-                                    foundPrice = pMatch
-                                end
-
-                                -- Kiểm tra trạng thái Mua (In Stock)
-                                if (string.find(lowerTxt, "buy") or pMatch) and child.Visible and child.TextTransparency < 0.5 then
-                                    isAvailable = true
-                                end
+                                table.insert(ServerData, {
+                                    Name = tostring(itemName),
+                                    Price = type(itemPrice) == "number" and ("$" .. itemPrice) or tostring(itemPrice),
+                                    InStock = stockStatus
+                                })
                             end
                         end
-
-                        -- Nếu quét được thông tin có Tên hạt giống
-                        if foundName then
-                            table.insert(ExtractedData, {
-                                Name = foundName,
-                                Price = foundPrice or "Free",
-                                InStock = isAvailable
-                            })
-                        end
                     end
-                end
+                end)
             end
         end
     end
 
-    return ExtractedData
+    return ServerData
 end
 
 -- UPDATE UI FUNCTION
 local function RefreshUI()
-    RefreshBtn.Text = "⏳ Scanning..."
-    local Data = AutoScanShopData()
+    StatusLabelTop.Text = "Status: Syncing..."
+    local Data = AutoFetchFromServer()
 
     for i = 1, 30 do
         local row = UI_Rows[i]
@@ -251,26 +215,19 @@ local function RefreshUI()
                 row.Status.TextColor3 = Color3.fromRGB(255, 60, 60)
             end
         else
-            row.Name.Text = i .. ". ----"
+            row.Name.Text = i .. ". Slot " .. i
             row.Name.TextColor3 = Color3.fromRGB(100, 100, 100)
             row.Status.Text = "❌ Off Stock"
             row.Status.TextColor3 = Color3.fromRGB(180, 50, 50)
         end
     end
-
-    RefreshBtn.Text = "🔄 Scan Shop"
+    StatusLabelTop.Text = "Status: Connected"
 end
 
-RefreshBtn.MouseButton1Click:Connect(RefreshUI)
-
--- AUTO RUN & TIMED CHECK (EVERY 5 MINS)
+-- TỰ ĐỘNG CHẠY NGẦM LIÊN TỤC (TỰ CẬP NHẬT MỖI 5 PHÚT HOẶC MỖI LẦN RESET SHOP)
 task.spawn(function()
-    RefreshUI()
-    while task.wait(1) do
-        local now = os.date("*t")
-        if now.min % 5 == 0 and now.sec == 0 then
-            RefreshUI()
-            task.wait(1)
-        end
+    while true do
+        RefreshUI()
+        task.wait(10) -- Tự động cập nhật ngầm định kỳ
     end
 end)
