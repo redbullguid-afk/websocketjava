@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN - ULTIMATE AUTO PET & AUTO HARVEST ]] --
+-- [[ GROW A GARDEN - ULTIMATE FIX AUTO HARVEST ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -7,7 +7,7 @@ local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Clear UI cũ
+-- Clean dọn dẹp UI cũ
 if CoreGui:FindFirstChild("GAG_GoldMenu") then
     CoreGui.GAG_GoldMenu:Destroy()
 end
@@ -81,18 +81,8 @@ CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 CloseBtn.TextSize = 16
 CloseBtn.Font = Enum.Font.SourceSansBold
 
--- Hiệu ứng Đóng/Mở Menu
-local isMenuOpen = true
-local function ToggleMenuAnimation(open)
-    isMenuOpen = open
-    local targetSize = open and UDim2.new(0, 360, 0, 110) or UDim2.new(0, 0, 0, 110)
-    local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
-    
-    TweenService:Create(MainFrame, tweenInfo, {Size = targetSize}):Play()
-end
-
-CloseBtn.MouseButton1Click:Connect(function() ToggleMenuAnimation(false) end)
-OpenBtn.MouseButton1Click:Connect(function() ToggleMenuAnimation(not isMenuOpen) end)
+CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
+OpenBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
 -- ==========================================
 -- 🔘 HÀM TẠO NÚT GẠT BẬT/TẮT (TOGGLE SWITCH)
@@ -114,7 +104,6 @@ local function CreateToggleSwitch(parent, labelText, posX, callback)
     Label.Font = Enum.Font.SourceSansBold
     Label.TextSize = 14
 
-    -- Khung công tắc
     local SwitchBg = Instance.new("Frame")
     SwitchBg.Parent = Container
     SwitchBg.Size = UDim2.new(0, 50, 0, 24)
@@ -130,7 +119,6 @@ local function CreateToggleSwitch(parent, labelText, posX, callback)
     SwitchStroke.Thickness = 1.5
     SwitchStroke.Parent = SwitchBg
 
-    -- Nút tròn gạt
     local Knob = Instance.new("Frame")
     Knob.Parent = SwitchBg
     Knob.Size = UDim2.new(0, 18, 0, 18)
@@ -165,7 +153,6 @@ local function CreateToggleSwitch(parent, labelText, posX, callback)
     end)
 end
 
--- TẠO 2 NÚT NẰM NGANG
 local isAutoPet = false
 local isAutoHarvest = false
 
@@ -177,9 +164,8 @@ CreateToggleSwitch(MainFrame, "AUTO HARVEST", 190, function(state)
     isAutoHarvest = state
 end)
 
-
 -- ==========================================
--- 🐾 LOGIC 1: AUTO BUY PET (GIỮ NGUYÊN 10S COOLDOWN)
+-- 🐾 LOGIC 1: AUTO BUY PET (10S COOLDOWN)
 -- ==========================================
 
 local COOLDOWN_PET = 10
@@ -246,30 +232,13 @@ task.spawn(function()
     end
 end)
 
-
 -- ==========================================
--- 🌾 LOGIC 2: AUTO HARVEST (KHÔNG TELEPORT / KIỂM TRA VƯỜN NHÀ)
+-- 🌾 LOGIC 2: AUTO HARVEST VƯỜN NHÀ (FIXED)
 -- ==========================================
 
--- Hàm tìm khu đất/Vườn của người chơi
-local function GetMyGardenFolder()
-    -- Tìm thư mục Plots/Gardens trên Workspace chứa tên hoặc UserId của bạn
-    for _, folder in ipairs(Workspace:GetDescendants()) do
-        if folder:IsA("Model") or folder:IsA("Folder") then
-            local nameLower = folder.Name:lower()
-            if string.find(nameLower, LocalPlayer.Name:lower()) or string.find(nameLower, tostring(LocalPlayer.UserId)) then
-                return folder
-            end
-        end
-    end
-    -- Dự phòng: Nếu không gắn tên, lấy khu vực có khoảng cách gần nhân vật nhất
-    return Workspace
-end
-
--- Hàm kích hoạt thu hoạch quả/cây ngầm
-local function HarvestCropObject(obj)
-    -- 1. Nếu cây/quả dùng ProximityPrompt (Giữ E để hái)
-    local prompt = obj:FindFirstChildWhichIsA("ProximityPrompt", true)
+local function HarvestObject(item)
+    -- 1. Kích hoạt nút bấm ProximityPrompt (Giữ E hái)
+    local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
     if prompt and prompt.Enabled then
         pcall(function()
             prompt.RequiresLineOfSight = false
@@ -277,40 +246,57 @@ local function HarvestCropObject(obj)
         end)
     end
 
-    -- 2. Nếu là Cây 1 lần hoặc Cây nhiều lần có chạm TouchInterest (Quả chín)
-    local touchPart = obj:IsA("BasePart") and obj or obj:FindFirstChildWhichIsA("BasePart", true)
+    -- 2. Kích hoạt ClickDetector (Click chuột)
+    local click = item:FindFirstChildWhichIsA("ClickDetector", true)
+    if click and fireclickdetector then
+        pcall(function()
+            fireclickdetector(click)
+        end)
+    end
+
+    -- 3. Kích hoạt va chạm TouchInterest
+    local part = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true)
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
-    if touchPart and hrp and firetouchinterest then
+    if part and hrp and firetouchinterest then
         pcall(function()
-            firetouchinterest(hrp, touchPart, 0)
+            firetouchinterest(hrp, part, 0)
             task.wait(0.02)
-            firetouchinterest(hrp, touchPart, 1)
+            firetouchinterest(hrp, part, 1)
         end)
     end
 end
 
--- Vòng lặp thu hoạch vườn nhà ngầm
+-- Vòng lặp thu hoạch dựa theo bán kính quanh người chơi (30-40 studs)
 task.spawn(function()
     while true do
         if isAutoHarvest then
             pcall(function()
-                local myGarden = GetMyGardenFolder()
-                
-                -- Quét cây 1 lần & Trái chín của cây nhiều lần TRONG VƯỜN NHÀ
-                for _, crop in ipairs(myGarden:GetDescendants()) do
-                    if crop:IsA("Model") or crop:IsA("BasePart") then
-                        local cName = crop.Name:lower()
-                        
-                        -- Lọc các đối tượng nhận diện là cây chín / quả thu hoạch được
-                        if string.find(cName, "harvest") or string.find(cName, "ripe") or string.find(cName, "fruit") or string.find(cName, "crop") or crop:FindFirstChildWhichIsA("ProximityPrompt", true) then
-                            HarvestCropObject(crop)
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+                if hrp then
+                    -- Quét các vật thể nằm gần nhân vật (Bán kính 40 studs = Phạm vi Vườn nhà)
+                    for _, obj in ipairs(Workspace:GetDescendants()) do
+                        if obj:IsA("Model") or obj:IsA("BasePart") then
+                            
+                            -- Loại bỏ nhân vật người chơi khác & NPC
+                            if not Players:GetPlayerFromCharacter(obj) and not obj:FindFirstChildWhichIsA("Humanoid") then
+                                
+                                local pos = obj:IsA("BasePart") and obj.Position or obj:GetPivot().Position
+                                local distance = (hrp.Position - pos).Magnitude
+
+                                -- Chỉ xử lý các vật thể nằm trong phạm vi Vườn nhà (dưới 40 studs)
+                                if distance <= 40 then
+                                    HarvestObject(obj)
+                                end
+                            end
                         end
                     end
                 end
             end)
         end
-        task.wait(0.5) -- Quét liên tục mỗi 0.5s không lag, không teleport
+        task.wait(0.5) -- Quét liên tục mỗi 0.5 giây
     end
 end)
