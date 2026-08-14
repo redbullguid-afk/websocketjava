@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN - DIRECT SERVER HOOK CHECKER ]] --
+-- [[ GROW A GARDEN - ACCURATE STRICT SHOP CHECKER ]] --
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,13 +17,13 @@ local SeedList = {
 }
 
 -- Clear old UI
-if CoreGui:FindFirstChild("GardenCheckerDirect") then
-    CoreGui.GardenCheckerDirect:Destroy()
+if CoreGui:FindFirstChild("GardenCheckerStrict") then
+    CoreGui.GardenCheckerStrict:Destroy()
 end
 
 -- MAIN GUI
 local GardenGui = Instance.new("ScreenGui")
-GardenGui.Name = "GardenCheckerDirect"
+GardenGui.Name = "GardenCheckerStrict"
 GardenGui.Parent = CoreGui
 GardenGui.ResetOnSpawn = false
 
@@ -174,46 +174,64 @@ for i, seedName in ipairs(SeedList) do
     SeedRows[seedName:lower()] = StatusLabel
 end
 
--- TRUY VẤN DỮ LIỆU CHÍNH XÁC (FETCH SHOP DATA)
-local function FetchActiveShop()
+-- HÀM QUÉT CÔ LẬP SHOP THỰC TẾ (STRICT SHOP CHECK)
+local function GetStrictShopData()
     local StockMap = {}
 
-    -- Phương pháp 1: Gọi RemoteFunction nếu game dùng Server Query
-    for _, rf in ipairs(ReplicatedStorage:GetDescendants()) do
-        if rf:IsA("RemoteFunction") and (string.find(rf.Name:lower(), "shop") or string.find(rf.Name:lower(), "get") or string.find(rf.Name:lower(), "merchant")) then
-            pcall(function()
-                local res = rf:InvokeServer("GetShop") or rf:InvokeServer()
-                if type(res) == "table" then
-                    for k, v in pairs(res) do
-                        local nameStr = (type(v) == "table" and (v.Name or v.Item)) or tostring(k)
-                        local priceStr = (type(v) == "table" and (v.Price or v.Cost)) or "In Stock"
-                        for _, seed in ipairs(SeedList) do
-                            local sLower = seed:lower()
-                            if string.find(nameStr:lower(), sLower) then
-                                StockMap[sLower] = type(priceStr) == "number" and ("$" .. priceStr) or priceStr
+    local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not PlayerGui then return StockMap end
+
+    -- Danh sách từ khóa bị CẤM (Loại bỏ triệt để Inventory, Codex, Journal, Craft)
+    local BlacklistedGui = {"inventory", "backpack", "codex", "journal", "index", "recipe", "craft"}
+
+    for _, gui in ipairs(PlayerGui:GetChildren()) do
+        if gui:IsA("ScreenGui") and gui.Enabled then
+            local guiName = gui.Name:lower()
+            local isBlacklisted = false
+
+            for _, black in ipairs(BlacklistedGui) do
+                if string.find(guiName, black) then
+                    isBlacklisted = true
+                    break
+                end
+            end
+
+            -- Chỉ quét các Gui có chữ Shop hoặc SeedMerchant
+            if not isBlacklisted and (string.find(guiName, "shop") or string.find(guiName, "merchant") or string.find(guiName, "seed")) then
+                for _, element in ipairs(gui:GetDescendants()) do
+                    if element:IsA("Frame") or element:IsA("ImageLabel") or element:IsA("TextButton") then
+                        -- Kiểm tra xem thẻ/khung hạt giống này có chứa NÚT MUA (Buy Button) hay không
+                        local hasBuyBtn = false
+                        local detectedPrice = nil
+
+                        for _, sub in ipairs(element:GetDescendants()) do
+                            if sub:IsA("TextLabel") or sub:IsA("TextButton") then
+                                local text = sub.Text:lower()
+                                if string.find(text, "buy") or string.find(text, "purchase") or string.find(text, "%$") then
+                                    hasBuyBtn = true
+                                    local pMatch = string.match(sub.Text, "%$%d+") or string.match(sub.Text, "%d+")
+                                    if pMatch then detectedPrice = "$" .. pMatch end
+                                end
                             end
                         end
-                    end
-                end
-            end)
-        end
-    end
 
-    -- Phương pháp 2: Quét trực tiếp các Text Elements trên PlayerGui khi mở NPC
-    local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if PlayerGui then
-        for _, textObj in ipairs(PlayerGui:GetDescendants()) do
-            if textObj:IsA("TextLabel") or textObj:IsA("TextButton") then
-                local str = textObj.Text:lower()
-                for _, seed in ipairs(SeedList) do
-                    local sLower = seed:lower()
-                    if string.find(str, sLower) then
-                        -- Lấy giá tiền gần kề
-                        local priceMatch = string.match(textObj.Text, "%$%d+") or string.match(textObj.Text, "%d+")
-                        if priceMatch then
-                            StockMap[sLower] = "$" .. priceMatch
-                        else
-                            StockMap[sLower] = "In Stock"
+                        -- Nếu đúng là khung bán hàng (Có nút Mua/Giá)
+                        if hasBuyBtn then
+                            for _, seed in ipairs(SeedList) do
+                                local sLower = seed:lower()
+                                local frameText = element.Name:lower()
+                                
+                                -- Kiểm tra cả Tên Frame và Text bên trong
+                                for _, childText in ipairs(element:GetDescendants()) do
+                                    if childText:IsA("TextLabel") then
+                                        frameText = frameText .. " " .. childText.Text:lower()
+                                    end
+                                end
+
+                                if string.find(frameText, sLower) then
+                                    StockMap[sLower] = detectedPrice or "On Sale"
+                                end
+                            end
                         end
                     end
                 end
@@ -227,7 +245,7 @@ end
 -- UPDATE UI FUNCTION
 local function RefreshUI()
     RefreshBtn.Text = "⏳ Checking..."
-    local Stock = FetchActiveShop()
+    local Stock = GetStrictShopData()
 
     for _, seed in ipairs(SeedList) do
         local key = seed:lower()
@@ -235,10 +253,10 @@ local function RefreshUI()
 
         if Stock[key] then
             label.Text = "💲 " .. tostring(Stock[key])
-            label.TextColor3 = Color3.fromRGB(85, 255, 127)
+            label.TextColor3 = Color3.fromRGB(85, 255, 127) -- Green for In Stock
         else
             label.Text = "❌ Out of Stock"
-            label.TextColor3 = Color3.fromRGB(255, 60, 60)
+            label.TextColor3 = Color3.fromRGB(255, 60, 60) -- Red for Out of Stock
         end
     end
     RefreshBtn.Text = "🔄 Refresh"
