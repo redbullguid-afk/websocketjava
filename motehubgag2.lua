@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN - ULTIMATE FIX AUTO HARVEST ]] --
+-- [[ GROW A GARDEN - ULTIMATE PROXIMITY AUTO HARVEST ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -7,20 +7,23 @@ local CoreGui = game:GetService("CoreGui")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Clean dọn dẹp UI cũ
+-- Clean dọn dẹp UI cũ & tracer nếu có
 if CoreGui:FindFirstChild("GAG_GoldMenu") then
     CoreGui.GAG_GoldMenu:Destroy()
 end
+for _, v in ipairs(Workspace:GetChildren()) do
+    if v.Name == "PetTracer" then v:Destroy() end
+end
 
 -- ==========================================
--- 🎨 TẠO GIAO DIỆN HẰNG NGANG (GOLD & BLACK)
+-- 🎨 TẠO GIAO DIỆN NẰM NGANG (GOLD & BLACK)
 -- ==========================================
 
 local Gui = Instance.new("ScreenGui")
 Gui.Name = "GAG_GoldMenu"
 Gui.Parent = CoreGui
 
--- Nút tròn thu nhỏ/mở menu
+-- Nút tròn thu nhỏ / mở menu
 local OpenBtn = Instance.new("TextButton")
 OpenBtn.Parent = Gui
 OpenBtn.Size = UDim2.new(0, 45, 0, 45)
@@ -41,7 +44,7 @@ OpenStroke.Color = Color3.fromRGB(255, 215, 0)
 OpenStroke.Thickness = 2
 OpenStroke.Parent = OpenBtn
 
--- Khung Menu Chính (Nằm Ngang)
+-- Khung Menu Chính
 local MainFrame = Instance.new("Frame")
 MainFrame.Parent = Gui
 MainFrame.Size = UDim2.new(0, 360, 0, 110)
@@ -233,42 +236,35 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 🌾 LOGIC 2: AUTO HARVEST VƯỜN NHÀ (FIXED)
+-- 🌾 LOGIC 2: AUTO HARVEST BẰNG PROXIMITY PROMPT
 -- ==========================================
 
-local function HarvestObject(item)
-    -- 1. Kích hoạt nút bấm ProximityPrompt (Giữ E hái)
-    local prompt = item:FindFirstChildWhichIsA("ProximityPrompt", true)
-    if prompt and prompt.Enabled then
-        pcall(function()
-            prompt.RequiresLineOfSight = false
+local function TriggerCropPrompt(prompt, hrp)
+    if not prompt or not prompt.Enabled then return end
+    
+    -- Bỏ qua tầm nhìn và khoảng cách yêu cầu của Game
+    pcall(function()
+        prompt.RequiresLineOfSight = false
+        prompt.MaxActivationDistance = 9999
+        
+        -- Kích hoạt nút tương tác trực tiếp
+        if fireproximityprompt then
             fireproximityprompt(prompt)
-        end)
-    end
-
-    -- 2. Kích hoạt ClickDetector (Click chuột)
-    local click = item:FindFirstChildWhichIsA("ClickDetector", true)
-    if click and fireclickdetector then
+        end
+    end)
+    
+    -- Chạm ngầm bằng TouchInterest để đảm bảo thu hoạch ăn ngay
+    local parentPart = prompt.Parent:IsA("BasePart") and prompt.Parent or prompt.Parent:FindFirstChildWhichIsA("BasePart", true)
+    if parentPart and firetouchinterest and hrp then
         pcall(function()
-            fireclickdetector(click)
-        end)
-    end
-
-    -- 3. Kích hoạt va chạm TouchInterest
-    local part = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true)
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-
-    if part and hrp and firetouchinterest then
-        pcall(function()
-            firetouchinterest(hrp, part, 0)
+            firetouchinterest(hrp, parentPart, 0)
             task.wait(0.02)
-            firetouchinterest(hrp, part, 1)
+            firetouchinterest(hrp, parentPart, 1)
         end)
     end
 end
 
--- Vòng lặp thu hoạch dựa theo bán kính quanh người chơi (30-40 studs)
+-- Vòng lặp thu hoạch tự động
 task.spawn(function()
     while true do
         if isAutoHarvest then
@@ -277,19 +273,17 @@ task.spawn(function()
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
                 if hrp then
-                    -- Quét các vật thể nằm gần nhân vật (Bán kính 40 studs = Phạm vi Vườn nhà)
-                    for _, obj in ipairs(Workspace:GetDescendants()) do
-                        if obj:IsA("Model") or obj:IsA("BasePart") then
-                            
-                            -- Loại bỏ nhân vật người chơi khác & NPC
-                            if not Players:GetPlayerFromCharacter(obj) and not obj:FindFirstChildWhichIsA("Humanoid") then
-                                
-                                local pos = obj:IsA("BasePart") and obj.Position or obj:GetPivot().Position
+                    -- Quét tất cả ProximityPrompt trong Workspace
+                    for _, prompt in ipairs(Workspace:GetDescendants()) do
+                        if prompt:IsA("ProximityPrompt") and prompt.Enabled then
+                            local targetPart = prompt.Parent
+                            if targetPart then
+                                local pos = targetPart:IsA("BasePart") and targetPart.Position or targetPart:GetPivot().Position
                                 local distance = (hrp.Position - pos).Magnitude
 
-                                -- Chỉ xử lý các vật thể nằm trong phạm vi Vườn nhà (dưới 40 studs)
-                                if distance <= 40 then
-                                    HarvestObject(obj)
+                                -- Chỉ kích hoạt các quả nằm trong Vườn nhà (bán kính 45 studs)
+                                if distance <= 45 then
+                                    TriggerCropPrompt(prompt, hrp)
                                 end
                             end
                         end
@@ -297,6 +291,6 @@ task.spawn(function()
                 end
             end)
         end
-        task.wait(0.5) -- Quét liên tục mỗi 0.5 giây
+        task.wait(0.2) -- Quét cực nhanh 0.2s giúp hái quả ngay khi vừa chín!
     end
 end)
