@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN - ACCURATE SHOP CHECKER (ENGLISH) ]] --
+-- [[ GROW A GARDEN - RAW SEED STOCK CHECKER ]] --
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -17,13 +17,13 @@ local SeedList = {
 }
 
 -- Clear old UI
-if CoreGui:FindFirstChild("GardenCheckerAccurate") then
-    CoreGui.GardenCheckerAccurate:Destroy()
+if CoreGui:FindFirstChild("GardenCheckerFinal") then
+    CoreGui.GardenCheckerFinal:Destroy()
 end
 
 -- MAIN GUI
 local GardenGui = Instance.new("ScreenGui")
-GardenGui.Name = "GardenCheckerAccurate"
+GardenGui.Name = "GardenCheckerFinal"
 GardenGui.Parent = CoreGui
 GardenGui.ResetOnSpawn = false
 
@@ -74,7 +74,7 @@ local TitleCorner = Instance.new("UICorner")
 TitleCorner.CornerRadius = UDim.new(0, 10)
 TitleCorner.Parent = Title
 
--- TAB BAR
+-- TAB BAR (TAB 1: INFO)
 local TabBar = Instance.new("Frame")
 TabBar.Parent = MainFrame
 TabBar.Position = UDim2.new(0, 10, 0, 45)
@@ -122,7 +122,7 @@ ToggleBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- BUILD ROWS
+-- GENERATE ROWS
 local SeedRows = {}
 
 for i, seedName in ipairs(SeedList) do
@@ -160,100 +160,100 @@ for i, seedName in ipairs(SeedList) do
     SeedRows[seedName:lower()] = StatusLabel
 end
 
--- ACCURATE SHOP SCANNER
-local function GetShopData()
-    local AvailableSeeds = {}
+-- THU THẬP DỮ LIỆU BÁN HÀNG BẰNG CÁC PHƯƠNG PHÁP RAW
+local CacheStock = {}
 
-    -- 1. Quét từ Folder Shop/Merchant trong ReplicatedStorage (Server Data chính xác nhất)
-    local ShopFolder = ReplicatedStorage:FindFirstChild("Merchant") 
-                    or ReplicatedStorage:FindFirstChild("SeedMerchant") 
-                    or ReplicatedStorage:FindFirstChild("Shop")
-                    or workspace:FindFirstChild("Merchant")
+local function ScanRawGameData()
+    local FoundItems = {}
 
-    if ShopFolder then
-        -- Lấy các item thực sự nằm trong danh sách bán hiện tại
-        local ItemsFolder = ShopFolder:FindFirstChild("Items") or ShopFolder:FindFirstChild("Stock") or ShopFolder
-        for _, item in ipairs(ItemsFolder:GetChildren()) do
-            local itemName = item.Name:lower()
-            -- Kiểm tra nếu item này không bị hết hàng (Stock > 0)
-            local stockVal = item:FindFirstChild("Stock") or item:FindFirstChild("Amount") or item:FindFirstChild("InStock")
-            local isAvailable = true
-            
-            if stockVal then
-                if typeof(stockVal.Value) == "number" and stockVal.Value <= 0 then
-                    isAvailable = false
-                elseif typeof(stockVal.Value) == "boolean" and not stockVal.Value then
-                    isAvailable = false
+    -- 1. Quét sâu toàn bộ ReplicatedStorage cho các Value/String chứa thông tin Hạt
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        local oName = obj.Name:lower()
+        for _, seed in ipairs(SeedList) do
+            local sLower = seed:lower()
+            if string.find(oName, sLower) then
+                -- Kiểm tra nếu obj là StringValue / NumberValue hay Table
+                local price = "On Sale"
+                if obj:IsA("ValueBase") then
+                    price = "$" .. tostring(obj.Value)
+                elseif obj:FindFirstChild("Price") then
+                    price = "$" .. tostring(obj.Price.Value)
                 end
-            end
-
-            if isAvailable then
-                local priceVal = item:FindFirstChild("Price") or item:FindFirstChild("Cost")
-                local priceText = priceVal and ("$" .. tostring(priceVal.Value)) or "On Sale"
-                
-                for _, seed in ipairs(SeedList) do
-                    local sLower = seed:lower()
-                    if string.find(itemName, sLower) then
-                        AvailableSeeds[sLower] = priceText
-                    end
-                end
+                FoundItems[sLower] = price
             end
         end
     end
 
-    -- 2. Quét từ UI Shop thực tế trên màn hình (PlayerGui -> ShopFrame)
+    -- 2. Quét trực tiếp các Text UI đang Active
     local PlayerGui = LocalPlayer:FindFirstChild("PlayerGui")
     if PlayerGui then
-        -- Tìm khung Shop UI duy nhất (Bỏ qua Inventory, Hotbar, Plots)
-        for _, gui in ipairs(PlayerGui:GetChildren()) do
-            local gName = gui.Name:lower()
-            if string.find(gName, "shop") or string.find(gName, "merchant") or string.find(gName, "seed") then
-                for _, element in ipairs(gui:GetDescendants()) do
-                    if element:IsA("TextLabel") or element:IsA("TextButton") then
-                        local txt = element.Text:lower()
-                        for _, seed in ipairs(SeedList) do
-                            local sLower = seed:lower()
-                            -- Chỉ chấp nhận nếu Text chứa tên Hạt Giống + có Giá tiền kèm theo ($)
-                            if string.find(txt, sLower) and (string.find(txt, "%$") or string.find(txt, "buy")) then
-                                local price = string.match(element.Text, "%$%d+") or string.match(element.Text, "%d+") or "On Sale"
-                                AvailableSeeds[sLower] = price
-                            end
-                        end
+        for _, gui in ipairs(PlayerGui:GetDescendants()) do
+            if gui:IsA("TextLabel") and gui.Visible and gui.Text ~= "" then
+                local txt = gui.Text:lower()
+                for _, seed in ipairs(SeedList) do
+                    local sLower = seed:lower()
+                    if string.find(txt, sLower) then
+                        local priceMatch = string.match(gui.Text, "%$%d+") or string.match(gui.Text, "%d+")
+                        FoundItems[sLower] = priceMatch and ("$" .. priceMatch) or "On Sale"
                     end
                 end
             end
         end
     end
 
-    return AvailableSeeds
+    return FoundItems
 end
 
--- UPDATE UI FUNCTION
-local function RefreshShopStatus()
-    local CurrentStock = GetShopData()
+-- UPDATE FUNCTION
+local function RefreshStatus()
+    local CurrentStock = ScanRawGameData()
 
     for _, seed in ipairs(SeedList) do
         local key = seed:lower()
         local label = SeedRows[key]
 
-        if CurrentStock[key] then
-            label.Text = "💲 " .. tostring(CurrentStock[key])
-            label.TextColor3 = Color3.fromRGB(85, 255, 127) -- Xanh lá cho On Stock
+        if CurrentStock[key] or CacheStock[key] then
+            local priceVal = CurrentStock[key] or CacheStock[key]
+            label.Text = "💲 " .. tostring(priceVal)
+            label.TextColor3 = Color3.fromRGB(85, 255, 127) -- Xanh lá
         else
             label.Text = "❌ Out of Stock"
-            label.TextColor3 = Color3.fromRGB(255, 60, 60) -- Đỏ cho Out of Stock
+            label.TextColor3 = Color3.fromRGB(255, 60, 60) -- Đỏ
         end
     end
 end
 
--- AUTO CHECK EVERY 5 MINUTES (00, 05, 10, 15...)
+-- TỰ ĐỘNG CHẮN BẮT GÓI TIN DỮ LIỆU SHOP SERVER (REMOTE LISTENER)
+for _, remote in ipairs(ReplicatedStorage:GetDescendants()) do
+    if remote:IsA("RemoteEvent") then
+        remote.OnClientEvent:Connect(function(...)
+            local args = {...}
+            for _, arg in ipairs(args) do
+                if type(arg) == "table" then
+                    for k, v in pairs(arg) do
+                        local nameStr = tostring(k):lower() .. " " .. tostring(v):lower()
+                        for _, seed in ipairs(SeedList) do
+                            local sLower = seed:lower()
+                            if string.find(nameStr, sLower) then
+                                CacheStock[sLower] = "In Stock"
+                            end
+                        end
+                    end
+                end
+            end
+            RefreshStatus()
+        end)
+    end
+end
+
+-- AUTO RUN & AUTO CHECK EVERY 5 MINS (00, 05, 10, 15...)
 task.spawn(function()
-    RefreshShopStatus()
+    RefreshStatus()
     
     while task.wait(1) do
         local now = os.date("*t")
         if now.min % 5 == 0 and now.sec == 0 then
-            RefreshShopStatus()
+            RefreshStatus()
             task.wait(1)
         end
     end
