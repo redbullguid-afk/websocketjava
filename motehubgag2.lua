@@ -1,21 +1,19 @@
--- [[ GROW A GARDEN 2 - FREEDOM STEAL (NO FLY) ]] --
+-- [[ GROW A GARDEN 2 - SMART AUTO SELL ON FULL INVENTORY ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
 
--- Cleanup UI cũ
 if CoreGui:FindFirstChild("GAG_GoldMenu") then
     CoreGui.GAG_GoldMenu:Destroy()
 end
 
 -- ==========================================
--- 🎨 GIAO DIỆN MENU (GOLD & BLACK)
+-- 🎨 GIAO DIỆN MENU
 -- ==========================================
 
 local Gui = Instance.new("ScreenGui")
@@ -30,8 +28,6 @@ OpenBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 OpenBtn.Text = "🌾"
 OpenBtn.TextSize = 22
 OpenBtn.TextColor3 = Color3.fromRGB(255, 215, 0)
-OpenBtn.Active = true
-OpenBtn.Draggable = true
 
 local OpenCorner = Instance.new("UICorner")
 OpenCorner.CornerRadius = UDim.new(1, 0)
@@ -83,7 +79,7 @@ CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 OpenBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
 -- ==========================================
--- 🔘 TOGGLE SWITCH
+-- 🔘 TOGGLE SWITCHES
 -- ==========================================
 
 local function CreateToggleSwitch(parent, labelText, posX, callback)
@@ -157,14 +153,63 @@ local isAutoSteal = false
 local isAutoSell = false
 local isBusy = false
 local isNoclipping = false
+local isInventoryFull = false
 
 CreateToggleSwitch(MainFrame, "AUTO PET (FLY)", 15, function(state) isAutoPet = state end)
 CreateToggleSwitch(MainFrame, "AUTO HARVEST", 180, function(state) isAutoHarvest = state end)
 CreateToggleSwitch(MainFrame, "AUTO STEAL (AURA)", 345, function(state) isAutoSteal = state end)
-CreateToggleSwitch(MainFrame, "AUTO SELL TIMER", 510, function(state) isAutoSell = state end)
+CreateToggleSwitch(MainFrame, "AUTO SELL (FULL)", 510, function(state) isAutoSell = state end)
 
 -- ==========================================
--- 🔓 SYSTEM NOCLIP NÂNG CAO
+-- 🔓 UNLOCK / UNFREEZE GARDEN BUTTON
+-- ==========================================
+
+RunService.RenderStepped:Connect(function()
+    local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if pGui then
+        for _, guiObj in ipairs(pGui:GetDescendants()) do
+            if guiObj:IsA("GuiObject") then
+                if guiObj.Visible == false and (string.find(guiObj.Name:lower(), "garden") or string.find(guiObj.Name:lower(), "teleport") or string.find(guiObj.Name:lower(), "home")) then
+                    guiObj.Visible = true
+                end
+            end
+            if guiObj:IsA("TextButton") or guiObj:IsA("ImageButton") then
+                if guiObj.Active == false then
+                    guiObj.Active = true
+                end
+            end
+        end
+    end
+end)
+
+-- ==========================================
+-- 📦 GIÁM SÁT TRẠNG THÁI ĐẦY TÚI ĐỒ (FULL INVENTORY DETECTOR)
+-- ==========================================
+
+task.spawn(function()
+    while true do
+        pcall(function()
+            local pGui = LocalPlayer:FindFirstChild("PlayerGui")
+            if pGui then
+                local foundFullMsg = false
+                for _, obj in ipairs(pGui:GetDescendants()) do
+                    if obj:IsA("TextLabel") and obj.Visible then
+                        local txt = obj.Text:lower()
+                        if string.find(txt, "full") or string.find(txt, "max") or string.find(txt, "đầy") or string.find(txt, "inventory full") then
+                            foundFullMsg = true
+                            break
+                        end
+                    end
+                end
+                isInventoryFull = foundFullMsg
+            end
+        end)
+        task.wait(0.2)
+    end
+end)
+
+-- ==========================================
+-- 🔓 NOCLIP & FLY TWEEN
 -- ==========================================
 
 RunService.Stepped:Connect(function()
@@ -194,10 +239,6 @@ local function EnableNoclip(state)
     end
 end
 
--- ==========================================
--- 🛸 HÀM BAY TWEEN CHẬM & MƯỢT
--- ==========================================
-
 local function FlyTo(targetCFrame, speed)
     local char = LocalPlayer.Character
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -219,7 +260,7 @@ local function FlyTo(targetCFrame, speed)
 end
 
 -- ==========================================
--- 🌾 LOGIC 1: AUTO HARVEST SIÊU TỐC
+-- 🌾 LOGIC 1: AUTO HARVEST
 -- ==========================================
 
 local function FindGardenCenter()
@@ -291,7 +332,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 🥷 LOGIC 2: AUTO STEAL AURA (TRỘM XUNG QUANH NGHƯỜI CHƠI, KHÔNG FLY)
+-- 🥷 LOGIC 2: AUTO STEAL AURA (1S / 30 QUẢ - BÁN KÍNH 50 STUDS)
 -- ==========================================
 
 local function IsStealPrompt(prompt)
@@ -317,12 +358,11 @@ task.spawn(function()
                             local parentPart = prompt.Parent:IsA("BasePart") and prompt.Parent or prompt.Parent:FindFirstChildWhichIsA("BasePart", true)
                             
                             if parentPart then
-                                -- Kiểm tra khoảng cách thực tế giữa người chơi và quả (Bán kính 20 studs)
                                 local dist = (hrp.Position - parentPart.Position).Magnitude
-                                if dist <= 20 then
+                                if dist <= 50 then
                                     prompt.RequiresLineOfSight = false
-                                    prompt.MaxActivationDistance = 50
-                                    prompt.HoldDuration = 0 -- Bỏ qua đếm giây giữ nút
+                                    prompt.MaxActivationDistance = 60
+                                    prompt.HoldDuration = 0
 
                                     pcall(function()
                                         if fireproximityprompt then
@@ -331,15 +371,14 @@ task.spawn(function()
                                     end)
 
                                     stolenCount = stolenCount + 1
-                                    if stolenCount >= 10 then
-                                        break -- Đạt hạn mức 10 quả/lần quét
+                                    if stolenCount >= 30 then
+                                        break
                                     end
                                 end
                             end
                         end
                     end
 
-                    -- Điều khiển tốc độ: Nghỉ 1 giây nếu vừa trộm được quả
                     if stolenCount > 0 then
                         task.wait(1)
                     else
@@ -354,7 +393,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 💰 LOGIC 3: AUTO SELL (MỞ NPC & CHỌN BÁN)
+-- 💰 LOGIC 3: AUTO SELL (TỰ ĐỘNG BÁN KHI ĐẦY TÚI ĐỒ)
 -- ==========================================
 
 local function FindStevenNPC()
@@ -375,46 +414,37 @@ local function FindStevenNPC()
     return nil
 end
 
-local function ClickGUIOption1()
+local function ClickSellInventoryOption()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return end
+    if not playerGui then return false end
 
-    for _, obj in ipairs(playerGui:GetDescendants()) do
-        if obj:IsA("TextButton") or obj:IsA("TextLabel") then
-            local txt = obj.Text:lower()
-            if string.find(txt, "sell") or string.find(txt, "#1") or string.find(txt, "1.") or string.find(txt, "all") then
-                local btn = obj:IsA("TextButton") and obj or obj:FindFirstAncestorOfClass("TextButton")
-                if btn and btn.Visible then
-                    local pos = btn.AbsolutePosition
-                    local size = btn.AbsoluteSize
-                    local centerX = pos.X + (size.X / 2)
-                    local centerY = pos.Y + (size.Y / 2) + 36
-
+    for _, btn in ipairs(playerGui:GetDescendants()) do
+        if btn:IsA("TextButton") or btn:IsA("ImageButton") then
+            local txt = ""
+            if btn:IsA("TextButton") then txt = btn.Text:lower() end
+            
+            -- Khớp chính xác tùy chọn `#1 "Sell Inventory"` trong video
+            if string.find(txt, "sell inventory") or string.find(txt, "sell inventory\"") or string.find(txt, "#1") then
+                if btn.Visible then
                     pcall(function()
-                        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
-                        task.wait(0.05)
-                        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
+                        if firesignal then
+                            firesignal(btn.MouseButton1Click)
+                        end
+                        for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
+                            conn:Fire()
+                        end
                     end)
-
-                    pcall(function()
-                        for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do conn:Fire() end
-                        if firesignal then firesignal(btn.MouseButton1Click) end
-                    end)
+                    return true
                 end
             end
         end
     end
-
-    pcall(function()
-        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
-        task.wait(0.05)
-        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
-    end)
+    return false
 end
 
 task.spawn(function()
     while true do
-        if isAutoSell and not isBusy then
+        if isAutoSell and isInventoryFull and not isBusy then
             isBusy = true
             
             pcall(function()
@@ -429,9 +459,11 @@ task.spawn(function()
                         local targetPart = steven:IsA("BasePart") and steven or steven:FindFirstChildWhichIsA("BasePart", true)
                         
                         if targetPart then
+                            -- 1. Bay tới NPC Steven
                             FlyTo(targetPart.CFrame * CFrame.new(0, 0, -2.5), 40)
                             task.wait(0.4)
 
+                            -- 2. Tương tác Mở NPC
                             local prompt = steven:FindFirstChildWhichIsA("ProximityPrompt", true) or targetPart:FindFirstChildWhichIsA("ProximityPrompt", true) or (targetPart.Parent and targetPart.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
                             if prompt then
                                 prompt.RequiresLineOfSight = false
@@ -441,30 +473,29 @@ task.spawn(function()
                                 end
                             end
 
-                            pcall(function()
-                                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-                                task.wait(0.05)
-                                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-                            end)
+                            task.wait(0.6)
 
-                            task.wait(0.8)
-
-                            for i = 1, 12 do
-                                ClickGUIOption1()
-                                task.wait(0.2)
+                            -- 3. Click chính xác nút 'Sell Inventory'
+                            for i = 1, 5 do
+                                local success = ClickSellInventoryOption()
+                                task.wait(0.3)
+                                if success then break end
                             end
 
+                            task.wait(0.5)
+
+                            -- 4. Bay lại vị trí cũ
                             FlyTo(oldCFrame, 40)
                         end
                     end
                 end
             end)
 
-            task.wait(0.5)
+            isInventoryFull = false
             isBusy = false
-            task.wait(15)
+            task.wait(2)
         else
-            task.wait(1)
+            task.wait(0.5)
         end
     end
 end)
