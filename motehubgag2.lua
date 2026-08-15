@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN 2 - SMART AUTO SELL ON FULL INVENTORY ]] --
+-- [[ GROW A GARDEN 2 - FREEDOM STEAL (0.2S/FRUIT) & FIX GARDEN UNLOCK ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -161,10 +161,11 @@ CreateToggleSwitch(MainFrame, "AUTO STEAL (AURA)", 345, function(state) isAutoSt
 CreateToggleSwitch(MainFrame, "AUTO SELL (FULL)", 510, function(state) isAutoSell = state end)
 
 -- ==========================================
--- 🔓 UNLOCK / UNFREEZE GARDEN BUTTON
+-- 🔓 UNLOCK / UNFREEZE GARDEN BUTTON & CHARACTER TELEPORT
 -- ==========================================
 
 RunService.RenderStepped:Connect(function()
+    -- 1. Mở khóa thuộc tính nút bấm UI
     local pGui = LocalPlayer:FindFirstChild("PlayerGui")
     if pGui then
         for _, guiObj in ipairs(pGui:GetDescendants()) do
@@ -180,10 +181,35 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
+
+    -- 2. Dọn dẹp trạng thái khóa di chuyển / Teleport trên Character
+    local char = LocalPlayer.Character
+    if char then
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            if humanoid.WalkSpeed == 0 then
+                humanoid.WalkSpeed = 16 -- Phục hồi tốc độ di chuyển ban đầu
+            end
+            humanoid.PlatformStand = false
+        end
+
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hrp then
+            if hrp.Anchored then
+                hrp.Anchored = false -- Mở khóa CFrame cho phép Teleport
+            end
+            -- Dọn dẹp các mối nối (Weld/BodyVelocity) mà game tự gán vào người khi trộm
+            for _, child in ipairs(hrp:GetChildren()) do
+                if child:IsA("WeldConstraint") or child:IsA("Weld") or child:IsA("BodyVelocity") or child:IsA("BodyPosition") then
+                    child:Destroy()
+                end
+            end
+        end
+    end
 end)
 
 -- ==========================================
--- 📦 GIÁM SÁT TRẠNG THÁI ĐẦY TÚI ĐỒ (FULL INVENTORY DETECTOR)
+-- 📦 GIÁM SÁT ĐẦY TÚI ĐỒ
 -- ==========================================
 
 task.spawn(function()
@@ -332,7 +358,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 🥷 LOGIC 2: AUTO STEAL AURA (1S / 30 QUẢ - BÁN KÍNH 50 STUDS)
+-- 🥷 LOGIC 2: AUTO STEAL AURA (0.2S / 1 QUẢ - BÁN KÍNH 50 STUDS)
 -- ==========================================
 
 local function IsStealPrompt(prompt)
@@ -349,7 +375,7 @@ task.spawn(function()
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
                 if hrp then
-                    local stolenCount = 0
+                    local stoleAny = false
 
                     for _, prompt in ipairs(Workspace:GetDescendants()) do
                         if isBusy or not isAutoSteal then break end
@@ -370,17 +396,15 @@ task.spawn(function()
                                         end
                                     end)
 
-                                    stolenCount = stolenCount + 1
-                                    if stolenCount >= 30 then
-                                        break
-                                    end
+                                    stoleAny = true
+                                    break -- Trộm 1 quả mỗi chu kỳ
                                 end
                             end
                         end
                     end
 
-                    if stolenCount > 0 then
-                        task.wait(1)
+                    if stoleAny then
+                        task.wait(0.2) -- Thời gian chờ đúng 0.2s theo yêu cầu
                     else
                         task.wait(0.1)
                     end
@@ -423,7 +447,6 @@ local function ClickSellInventoryOption()
             local txt = ""
             if btn:IsA("TextButton") then txt = btn.Text:lower() end
             
-            -- Khớp chính xác tùy chọn `#1 "Sell Inventory"` trong video
             if string.find(txt, "sell inventory") or string.find(txt, "sell inventory\"") or string.find(txt, "#1") then
                 if btn.Visible then
                     pcall(function()
@@ -459,11 +482,9 @@ task.spawn(function()
                         local targetPart = steven:IsA("BasePart") and steven or steven:FindFirstChildWhichIsA("BasePart", true)
                         
                         if targetPart then
-                            -- 1. Bay tới NPC Steven
                             FlyTo(targetPart.CFrame * CFrame.new(0, 0, -2.5), 40)
                             task.wait(0.4)
 
-                            -- 2. Tương tác Mở NPC
                             local prompt = steven:FindFirstChildWhichIsA("ProximityPrompt", true) or targetPart:FindFirstChildWhichIsA("ProximityPrompt", true) or (targetPart.Parent and targetPart.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
                             if prompt then
                                 prompt.RequiresLineOfSight = false
@@ -475,7 +496,6 @@ task.spawn(function()
 
                             task.wait(0.6)
 
-                            -- 3. Click chính xác nút 'Sell Inventory'
                             for i = 1, 5 do
                                 local success = ClickSellInventoryOption()
                                 task.wait(0.3)
@@ -483,8 +503,6 @@ task.spawn(function()
                             end
 
                             task.wait(0.5)
-
-                            -- 4. Bay lại vị trí cũ
                             FlyTo(oldCFrame, 40)
                         end
                     end
