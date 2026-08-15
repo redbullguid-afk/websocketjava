@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN 2 - HARVEST & STEAL SYSTEM ]] --
+-- [[ GROW A GARDEN 2 - FIXED SELL & RATE LIMITED STEAL ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -291,7 +291,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 🥷 LOGIC 2: AUTO STEAL SIÊU TỐC (CHẠM & NHẤN GIỮ)
+-- 🥷 LOGIC 2: AUTO STEAL (CỐ ĐỊNH TỐC ĐỘ 10 QUẢ / 1 GIÂY)
 -- ==========================================
 
 local function IsStealPrompt(prompt)
@@ -308,38 +308,50 @@ task.spawn(function()
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
                 if hrp then
-                    -- Bỏ giới hạn khoảng cách và bỏ thời gian nhấn giữ (HoldDuration = 0)
+                    local count = 0
+
                     for _, prompt in ipairs(Workspace:GetDescendants()) do
                         if prompt:IsA("ProximityPrompt") and IsStealPrompt(prompt) then
                             prompt.RequiresLineOfSight = false
                             prompt.MaxActivationDistance = 999999
-                            prompt.HoldDuration = 0 -- Bỏ qua yêu cầu nhấn giữ đếm giây
+                            prompt.HoldDuration = 0
                         end
                     end
 
-                    -- Thu hoạch/Trộm siêu tốc (Xử lý song song bằng task.spawn)
                     for _, prompt in ipairs(Workspace:GetDescendants()) do
                         if isBusy or not isAutoSteal then break end
 
                         if prompt:IsA("ProximityPrompt") and prompt.Enabled and IsStealPrompt(prompt) then
-                            task.spawn(function()
-                                pcall(function()
-                                    if fireproximityprompt then
-                                        fireproximityprompt(prompt)
-                                    end
-                                end)
+                            pcall(function()
+                                if fireproximityprompt then
+                                    fireproximityprompt(prompt)
+                                end
                             end)
+
+                            count = count + 1
+                            if count >= 10 then
+                                break -- Dừng khi đủ 10 quả trong đợt quét
+                            end
                         end
                     end
+
+                    if count > 0 then
+                        task.wait(1) -- Chờ đúng 1 giây trước khi lấy 10 quả tiếp theo
+                    else
+                        task.wait(0.2)
+                    end
+                else
+                    task.wait(0.5)
                 end
             end)
+        else
+            task.wait(0.5)
         end
-        task.wait(0.05)
     end
 end)
 
 -- ==========================================
--- 💰 LOGIC 3: AUTO SELL (GIẢ LẬP CLICK MÀN HÌNH CHÍNH XÁC 100%)
+-- 💰 LOGIC 3: AUTO SELL (FIXED BẤM NÚT #1 HOẶC PHÍM 1)
 -- ==========================================
 
 local function FindStevenNPC()
@@ -361,15 +373,16 @@ local function FindStevenNPC()
 end
 
 local function ClickGUIOption1()
+    local clicked = false
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return end
+    if not playerGui then return false end
 
     for _, obj in ipairs(playerGui:GetDescendants()) do
-        if (obj:IsA("TextButton") or obj:IsA("TextLabel")) and obj.Visible then
+        if obj:IsA("TextButton") or obj:IsA("TextLabel") then
             local txt = obj.Text:lower()
-            if string.find(txt, "sell inventory") or string.find(txt, "#1") or string.find(txt, "sell all") then
-                local btn = obj:IsA("TextButton") and obj or obj.Parent
-                if btn and btn:IsA("TextButton") then
+            if string.find(txt, "sell") or string.find(txt, "#1") or string.find(txt, "1.") or string.find(txt, "all") then
+                local btn = obj:IsA("TextButton") and obj or obj:FindFirstAncestorOfClass("TextButton")
+                if btn and btn.Visible then
                     local pos = btn.AbsolutePosition
                     local size = btn.AbsoluteSize
                     local centerX = pos.X + (size.X / 2)
@@ -385,10 +398,20 @@ local function ClickGUIOption1()
                         for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do conn:Fire() end
                         if firesignal then firesignal(btn.MouseButton1Click) end
                     end)
+                    clicked = true
                 end
             end
         end
     end
+
+    -- Giả lập bấm phím số 1 nếu UI trò chuyện hỗ trợ phím tắt
+    pcall(function()
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+        task.wait(0.05)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
+    end)
+
+    return clicked
 end
 
 task.spawn(function()
@@ -428,7 +451,7 @@ task.spawn(function()
 
                             task.wait(0.8)
 
-                            for i = 1, 10 do
+                            for i = 1, 12 do
                                 ClickGUIOption1()
                                 task.wait(0.2)
                             end
