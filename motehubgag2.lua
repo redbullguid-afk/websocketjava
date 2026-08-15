@@ -1,9 +1,10 @@
--- [[ GROW A GARDEN 2 - TWEEN MOVEMENT & ULTRA HARVEST ]] --
+-- [[ GROW A GARDEN 2 - FIXED SELL & AREA HARVEST ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local CoreGui = game:GetService("CoreGui")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -62,7 +63,7 @@ local Title = Instance.new("TextLabel")
 Title.Parent = MainFrame
 Title.Size = UDim2.new(1, 0, 0, 30)
 Title.BackgroundTransparency = 1
-Title.Text = "★ GROW A GARDEN 2 - FLY & FAST HARVEST ★"
+Title.Text = "★ GROW A GARDEN 2 - FIXED HUB ★"
 Title.TextColor3 = Color3.fromRGB(255, 215, 0)
 Title.Font = Enum.Font.SourceSansBold
 Title.TextSize = 15
@@ -81,7 +82,7 @@ CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false end)
 OpenBtn.MouseButton1Click:Connect(function() MainFrame.Visible = not MainFrame.Visible end)
 
 -- ==========================================
--- 🔘 HÀM TẠO TOGGLE SWITCH
+-- 🔘 TOGGLE SWITCH
 -- ==========================================
 
 local function CreateToggleSwitch(parent, labelText, posX, callback)
@@ -153,13 +154,23 @@ local isAutoPet = false
 local isAutoHarvest = false
 local isAutoSell = false
 local isBusy = false
+local MyGardenPos = nil
 
 CreateToggleSwitch(MainFrame, "AUTO PET (FLY)", 15, function(state) isAutoPet = state end)
-CreateToggleSwitch(MainFrame, "AUTO HARVEST", 180, function(state) isAutoHarvest = state end)
+
+CreateToggleSwitch(MainFrame, "AUTO HARVEST", 180, function(state) 
+    isAutoHarvest = state 
+    if state then
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if hrp then MyGardenPos = hrp.Position end
+    end
+end)
+
 CreateToggleSwitch(MainFrame, "AUTO SELL FULL", 345, function(state) isAutoSell = state end)
 
 -- ==========================================
--- 🛸 HÀM BAY MƯỢT (TWEEN FLY - CHỐNG ANTI-TP)
+-- 🛸 HÀM BAY TWEEN AN TOÀN
 -- ==========================================
 
 local function FlyTo(targetCFrame, speed)
@@ -167,7 +178,7 @@ local function FlyTo(targetCFrame, speed)
     local hrp = char and char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    speed = speed or 60 -- Tốc độ bay an toàn không bị Server Kick/Rollback
+    speed = speed or 65
     local distance = (hrp.Position - targetCFrame.Position).Magnitude
     local duration = distance / speed
 
@@ -179,7 +190,7 @@ local function FlyTo(targetCFrame, speed)
 end
 
 -- ==========================================
--- 🐾 LOGIC 1: AUTO PET (BAY MƯỢT TỚI PET)
+-- 🐾 LOGIC 1: AUTO PET
 -- ==========================================
 
 local COOLDOWN_PET = 12
@@ -211,11 +222,9 @@ task.spawn(function()
                             isBusy = true
                             local oldCFrame = hrp.CFrame
                             
-                            -- Bay mượt tới Pet thay vì Teleport
                             FlyTo(targetPart.CFrame * CFrame.new(0, 2, 0), 70)
-                            task.wait(0.3)
+                            task.wait(0.4)
 
-                            -- Bấm nút nhặt
                             local prompt = targetPart:FindFirstChildWhichIsA("ProximityPrompt", true) or targetPet:FindFirstChildWhichIsA("ProximityPrompt", true)
                             if prompt then
                                 pcall(function()
@@ -224,16 +233,7 @@ task.spawn(function()
                                 end)
                             end
 
-                            if firetouchinterest then
-                                pcall(function()
-                                    firetouchinterest(hrp, targetPart, 0)
-                                    task.wait(0.05)
-                                    firetouchinterest(hrp, targetPart, 1)
-                                end)
-                            end
-
                             task.wait(0.5)
-                            -- Bay mượt trở về vị trí cũ
                             FlyTo(oldCFrame, 80)
                             
                             isBusy = false
@@ -248,15 +248,8 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 🌾 LOGIC 2: AUTO HARVEST SIÊU TỐC (KHÔNG PHỤ THUỘC VỊ TRÍ)
+-- 🌾 LOGIC 2: AUTO HARVEST (QUÉT VÙNG VƯỜN BẮT BỘC)
 -- ==========================================
-
-local function IsPlayerObject(obj)
-    for _, player in ipairs(Players:GetPlayers()) do
-        if player.Character and obj:IsDescendantOf(player.Character) then return true end
-    end
-    return false
-end
 
 local function IsHarvestPrompt(prompt)
     local actionText = prompt.ActionText:lower()
@@ -268,33 +261,82 @@ task.spawn(function()
     while true do
         if isAutoHarvest and not isBusy then
             pcall(function()
-                for _, prompt in ipairs(Workspace:GetDescendants()) do
-                    if isBusy then break end
-                    
-                    if prompt:IsA("ProximityPrompt") and prompt.Enabled then
-                        local targetPart = prompt.Parent
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+                if hrp then
+                    for _, prompt in ipairs(Workspace:GetDescendants()) do
+                        if isBusy then break end
                         
-                        -- Chỉ bấm các nút chứa chữ "harvest" & Không phải thuộc người chơi khác
-                        if targetPart and not IsPlayerObject(targetPart) and IsHarvestPrompt(prompt) then
-                            task.defer(function()
-                                pcall(function()
-                                    prompt.RequiresLineOfSight = false
-                                    prompt.MaxActivationDistance = 99999
-                                    if fireproximityprompt then fireproximityprompt(prompt) end
-                                end)
-                            end)
+                        if prompt:IsA("ProximityPrompt") and prompt.Enabled and IsHarvestPrompt(prompt) then
+                            local targetPart = prompt.Parent
+                            if targetPart then
+                                local pos = targetPart:IsA("BasePart") and targetPart.Position or targetPart:GetPivot().Position
+                                
+                                -- Nếu đã lưu vị trí vườn, ưu tiên quét trong bán kính Vườn nhà
+                                local inRange = true
+                                if MyGardenPos then
+                                    local dist = (Vector3.new(MyGardenPos.X, 0, MyGardenPos.Z) - Vector3.new(pos.X, 0, pos.Z)).Magnitude
+                                    inRange = dist <= 120
+                                end
+
+                                if inRange then
+                                    pcall(function()
+                                        prompt.RequiresLineOfSight = false
+                                        prompt.MaxActivationDistance = 99999
+                                        if fireproximityprompt then fireproximityprompt(prompt) end
+                                    end)
+                                end
+                            end
                         end
                     end
                 end
             end)
         end
-        task.wait(0.1) -- Quét liên tục mỗi 0.1s cho tốc độ siêu nhanh
+        task.wait(0.15)
     end
 end)
 
 -- ==========================================
--- 💰 LOGIC 3: AUTO SELL (BAY TỚI NPC & KÍCH HOẠT BÁN)
+-- 💰 LOGIC 3: AUTO SELL (GỬI EVENT & BẬT UI BÁN)
 -- ==========================================
+
+local function TriggerSellAction()
+    -- 1. Tìm và gửi RemoteEvent Bán nông sản trong ReplicatedStorage
+    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+        if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
+            local name = obj.Name:lower()
+            if string.find(name, "sell") or string.find(name, "merchant") then
+                pcall(function()
+                    if obj:IsA("RemoteEvent") then
+                        obj:FireServer()
+                    else
+                        obj:InvokeServer()
+                    end
+                end)
+            end
+        end
+    end
+
+    -- 2. Tự động bấm nút "Sell All" nếu giao diện Menu Bán hiện lên
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if playerGui then
+        for _, btn in ipairs(playerGui:GetDescendants()) do
+            if btn:IsA("TextButton") or btn:IsA("ImageButton") then
+                local txt = btn.Name:lower()
+                if btn:IsA("TextButton") then txt = txt .. " " .. btn.Text:lower() end
+                
+                if string.find(txt, "sell all") or string.find(txt, "sellall") or string.find(txt, "confirm sell") then
+                    pcall(function()
+                        for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do
+                            conn:Fire()
+                        end
+                    end)
+                end
+            end
+        end
+    end
+end
 
 local function IsInventoryFull()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
@@ -326,11 +368,11 @@ task.spawn(function()
                     if sellZone then
                         local sellPart = sellZone:IsA("BasePart") and sellZone or sellZone:FindFirstChildWhichIsA("BasePart", true)
                         if sellPart then
-                            -- Bay tới vị trí NPC Sell
+                            -- Bay tới vị trí NPC
                             FlyTo(sellPart.CFrame * CFrame.new(0, 2, 0), 80)
                             task.wait(0.3)
 
-                            -- Kích hoạt ProximityPrompt của NPC Sell (Nếu có)
+                            -- Kích hoạt ProximityPrompt của NPC
                             local sellPrompt = sellZone:FindFirstChildWhichIsA("ProximityPrompt", true)
                             if sellPrompt then
                                 pcall(function()
@@ -339,17 +381,14 @@ task.spawn(function()
                                 end)
                             end
 
-                            -- Tương tác chạm vào sàn Bán
-                            if firetouchinterest then
-                                pcall(function()
-                                    firetouchinterest(hrp, sellPart, 0)
-                                    task.wait(0.1)
-                                    firetouchinterest(hrp, sellPart, 1)
-                                end)
+                            -- Thực hiện Bán qua Event / UI
+                            local sellTimer = tick()
+                            while tick() - sellTimer < 2 do
+                                TriggerSellAction()
+                                task.wait(0.3)
                             end
 
-                            task.wait(1.5) -- Đợi bán hoàn tất
-                            -- Bay trở về vị trí ban đầu
+                            -- Bay về vị trí cũ
                             FlyTo(oldCFrame, 80)
                         end
                     end
