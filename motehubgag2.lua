@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN 2 - FIXED SELL & RATE LIMITED STEAL ]] --
+-- [[ GROW A GARDEN 2 - FREEDOM STEAL (NO FLY) ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -160,7 +160,7 @@ local isNoclipping = false
 
 CreateToggleSwitch(MainFrame, "AUTO PET (FLY)", 15, function(state) isAutoPet = state end)
 CreateToggleSwitch(MainFrame, "AUTO HARVEST", 180, function(state) isAutoHarvest = state end)
-CreateToggleSwitch(MainFrame, "AUTO STEAL", 345, function(state) isAutoSteal = state end)
+CreateToggleSwitch(MainFrame, "AUTO STEAL (AURA)", 345, function(state) isAutoSteal = state end)
 CreateToggleSwitch(MainFrame, "AUTO SELL TIMER", 510, function(state) isAutoSell = state end)
 
 -- ==========================================
@@ -291,7 +291,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 🥷 LOGIC 2: AUTO STEAL (CỐ ĐỊNH TỐC ĐỘ 10 QUẢ / 1 GIÂY)
+-- 🥷 LOGIC 2: AUTO STEAL AURA (TRỘM XUNG QUANH NGHƯỜI CHƠI, KHÔNG FLY)
 -- ==========================================
 
 local function IsStealPrompt(prompt)
@@ -308,50 +308,53 @@ task.spawn(function()
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
                 if hrp then
-                    local count = 0
-
-                    for _, prompt in ipairs(Workspace:GetDescendants()) do
-                        if prompt:IsA("ProximityPrompt") and IsStealPrompt(prompt) then
-                            prompt.RequiresLineOfSight = false
-                            prompt.MaxActivationDistance = 999999
-                            prompt.HoldDuration = 0
-                        end
-                    end
+                    local stolenCount = 0
 
                     for _, prompt in ipairs(Workspace:GetDescendants()) do
                         if isBusy or not isAutoSteal then break end
 
                         if prompt:IsA("ProximityPrompt") and prompt.Enabled and IsStealPrompt(prompt) then
-                            pcall(function()
-                                if fireproximityprompt then
-                                    fireproximityprompt(prompt)
-                                end
-                            end)
+                            local parentPart = prompt.Parent:IsA("BasePart") and prompt.Parent or prompt.Parent:FindFirstChildWhichIsA("BasePart", true)
+                            
+                            if parentPart then
+                                -- Kiểm tra khoảng cách thực tế giữa người chơi và quả (Bán kính 20 studs)
+                                local dist = (hrp.Position - parentPart.Position).Magnitude
+                                if dist <= 20 then
+                                    prompt.RequiresLineOfSight = false
+                                    prompt.MaxActivationDistance = 50
+                                    prompt.HoldDuration = 0 -- Bỏ qua đếm giây giữ nút
 
-                            count = count + 1
-                            if count >= 10 then
-                                break -- Dừng khi đủ 10 quả trong đợt quét
+                                    pcall(function()
+                                        if fireproximityprompt then
+                                            fireproximityprompt(prompt)
+                                        end
+                                    end)
+
+                                    stolenCount = stolenCount + 1
+                                    if stolenCount >= 10 then
+                                        break -- Đạt hạn mức 10 quả/lần quét
+                                    end
+                                end
                             end
                         end
                     end
 
-                    if count > 0 then
-                        task.wait(1) -- Chờ đúng 1 giây trước khi lấy 10 quả tiếp theo
+                    -- Điều khiển tốc độ: Nghỉ 1 giây nếu vừa trộm được quả
+                    if stolenCount > 0 then
+                        task.wait(1)
                     else
-                        task.wait(0.2)
+                        task.wait(0.1)
                     end
-                else
-                    task.wait(0.5)
                 end
             end)
         else
-            task.wait(0.5)
+            task.wait(0.3)
         end
     end
 end)
 
 -- ==========================================
--- 💰 LOGIC 3: AUTO SELL (FIXED BẤM NÚT #1 HOẶC PHÍM 1)
+-- 💰 LOGIC 3: AUTO SELL (MỞ NPC & CHỌN BÁN)
 -- ==========================================
 
 local function FindStevenNPC()
@@ -373,9 +376,8 @@ local function FindStevenNPC()
 end
 
 local function ClickGUIOption1()
-    local clicked = false
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if not playerGui then return false end
+    if not playerGui then return end
 
     for _, obj in ipairs(playerGui:GetDescendants()) do
         if obj:IsA("TextButton") or obj:IsA("TextLabel") then
@@ -398,20 +400,16 @@ local function ClickGUIOption1()
                         for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do conn:Fire() end
                         if firesignal then firesignal(btn.MouseButton1Click) end
                     end)
-                    clicked = true
                 end
             end
         end
     end
 
-    -- Giả lập bấm phím số 1 nếu UI trò chuyện hỗ trợ phím tắt
     pcall(function()
         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.One, false, game)
         task.wait(0.05)
         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.One, false, game)
     end)
-
-    return clicked
 end
 
 task.spawn(function()
