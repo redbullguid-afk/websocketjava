@@ -1,11 +1,11 @@
--- [[ GROW A GARDEN 2 - FULL SCRIPT (FIXED AUTO SELL ONLY) ]] --
+-- [[ GROW A GARDEN 2 - FIXED AUTO SELL (VIRTUAL INPUT ENGINE) ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
 local CoreGui = game:GetService("CoreGui")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -159,7 +159,7 @@ local isNoclipping = false
 
 CreateToggleSwitch(MainFrame, "AUTO PET (FLY)", 15, function(state) isAutoPet = state end)
 CreateToggleSwitch(MainFrame, "AUTO HARVEST", 180, function(state) isAutoHarvest = state end)
-CreateToggleSwitch(MainFrame, "AUTO SELL FULL", 345, function(state) isAutoSell = state end)
+CreateToggleSwitch(MainFrame, "AUTO SELL TIMER", 345, function(state) isAutoSell = state end)
 
 -- ==========================================
 -- 🔓 SYSTEM NOCLIP NÂNG CAO
@@ -289,7 +289,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 💰 LOGIC 2: AUTO SELL (TRỰC TIẾP QUA REMOTE EVENT & PROXIMITY)
+-- 💰 LOGIC 2: AUTO SELL (GIẢ LẬP CLICK MÀN HÌNH CHÍNH XÁC 100%)
 -- ==========================================
 
 local function FindStevenNPC()
@@ -310,45 +310,45 @@ local function FindStevenNPC()
     return nil
 end
 
-local function DirectSellAll()
-    -- Bắn thẳng Server Events để xả sạch đồ
-    pcall(function()
-        for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-            if obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction") then
-                local n = obj.Name:lower()
-                if string.find(n, "sell") or string.find(n, "merchant") or string.find(n, "dialogue") then
-                    if obj:IsA("RemoteEvent") then
-                        obj:FireServer("SellAll")
-                        obj:FireServer(1)
-                        obj:FireServer("SellInventory")
-                    end
-                end
-            end
-        end
-    end)
-end
-
-local function IsInventoryFull()
+local function ClickGUIOption1()
     local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
-    if playerGui then
-        for _, gui in ipairs(playerGui:GetDescendants()) do
-            if gui:IsA("TextLabel") and gui.Visible then
-                local txt = gui.Text:lower()
-                if string.find(txt, "full") or string.find(txt, "inventory full") or string.find(txt, "backpack full") then
-                    return true
+    if not playerGui then return end
+
+    for _, obj in ipairs(playerGui:GetDescendants()) do
+        if (obj:IsA("TextButton") or obj:IsA("TextLabel")) and obj.Visible then
+            local txt = obj.Text:lower()
+            if string.find(txt, "sell inventory") or string.find(txt, "#1") or string.find(txt, "sell all") then
+                local btn = obj:IsA("TextButton") and obj or obj.Parent
+                if btn and btn:IsA("TextButton") then
+                    -- Bấm bằng Virtual Input màn hình
+                    local pos = btn.AbsolutePosition
+                    local size = btn.AbsoluteSize
+                    local centerX = pos.X + (size.X / 2)
+                    local centerY = pos.Y + (size.Y / 2) + 36 -- Bù thanh CoreGui Roblox
+
+                    pcall(function()
+                        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
+                        task.wait(0.05)
+                        VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
+                    end)
+
+                    -- Backup connection fire
+                    pcall(function()
+                        for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do conn:Fire() end
+                        if firesignal then firesignal(btn.MouseButton1Click) end
+                    end)
                 end
             end
         end
     end
-    return false
 end
 
 task.spawn(function()
     while true do
         if isAutoSell and not isBusy then
-            if IsInventoryFull() then
-                isBusy = true -- Khóa Auto Harvest
-                
+            isBusy = true -- Khóa Auto Harvest
+            
+            pcall(function()
                 local char = LocalPlayer.Character
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
 
@@ -360,35 +360,48 @@ task.spawn(function()
                         local targetPart = steven:IsA("BasePart") and steven or steven:FindFirstChildWhichIsA("BasePart", true)
                         
                         if targetPart then
-                            -- Bay mượt đứng đúng vị trí mặt Steven
-                            FlyTo(targetPart.CFrame * CFrame.new(0, 0, -2), 40)
-                            task.wait(0.3)
+                            -- 1. Bay áp sát trực diện Steven
+                            FlyTo(targetPart.CFrame * CFrame.new(0, 0, -2.5), 40)
+                            task.wait(0.4)
 
-                            -- Bấm Prompt
-                            local prompt = steven:FindFirstChildWhichIsA("ProximityPrompt", true) or targetPart:FindFirstChildWhichIsA("ProximityPrompt", true)
+                            -- 2. Kích hoạt Prompt mở cuộc trò chuyện
+                            local prompt = steven:FindFirstChildWhichIsA("ProximityPrompt", true) or targetPart:FindFirstChildWhichIsA("ProximityPrompt", true) or (targetPart.Parent and targetPart.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
                             if prompt then
                                 prompt.RequiresLineOfSight = false
                                 prompt.MaxActivationDistance = 50
-                                if fireproximityprompt then fireproximityprompt(prompt) end
+                                if fireproximityprompt then
+                                    fireproximityprompt(prompt)
+                                end
                             end
 
-                            -- Thực thi xả túi đồ ngay lập tức
+                            -- Giả lập bấm phím 'E' để chắc chắn mở được NPC
+                            pcall(function()
+                                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+                                task.wait(0.05)
+                                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+                            end)
+
+                            task.wait(0.8)
+
+                            -- 3. Liên tục chọn tùy chọn #1
                             for i = 1, 10 do
-                                DirectSellAll()
-                                task.wait(0.1)
+                                ClickGUIOption1()
+                                task.wait(0.2)
                             end
 
-                            -- Bay mượt về vị trí cũ trong vườn
+                            -- 4. Bay mượt quay về vườn
                             FlyTo(oldCFrame, 40)
                         end
                     end
                 end
+            end)
 
-                task.wait(0.5)
-                isBusy = false -- Mở khóa Auto Harvest
-            end
+            task.wait(0.5)
+            isBusy = false -- Mở khóa Auto Harvest
+            task.wait(15) -- Tự động đi bán mỗi 15 giây
+        else
+            task.wait(1)
         end
-        task.wait(1)
     end
 end)
 
