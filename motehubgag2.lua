@@ -1,4 +1,4 @@
--- [[ GROW A GARDEN 2 - FIXED AUTO SELL (VIRTUAL INPUT ENGINE) ]] --
+-- [[ GROW A GARDEN 2 - HARVEST & STEAL SYSTEM ]] --
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -44,8 +44,8 @@ OpenStroke.Parent = OpenBtn
 
 local MainFrame = Instance.new("Frame")
 MainFrame.Parent = Gui
-MainFrame.Size = UDim2.new(0, 520, 0, 110)
-MainFrame.Position = UDim2.new(0.08, 0, 0.15, 0)
+MainFrame.Size = UDim2.new(0, 680, 0, 110)
+MainFrame.Position = UDim2.new(0.05, 0, 0.15, 0)
 MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 20)
 MainFrame.ClipsDescendants = true
 MainFrame.Active = true
@@ -72,7 +72,7 @@ Title.TextSize = 15
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Parent = MainFrame
 CloseBtn.Size = UDim2.new(0, 25, 0, 25)
-CloseBtn.Position = UDim2.new(0.94, -5, 0.05, 0)
+CloseBtn.Position = UDim2.new(0.95, -5, 0.05, 0)
 CloseBtn.BackgroundTransparency = 1
 CloseBtn.Text = "✕"
 CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -153,13 +153,15 @@ end
 
 local isAutoPet = false
 local isAutoHarvest = false
+local isAutoSteal = false
 local isAutoSell = false
 local isBusy = false
 local isNoclipping = false
 
 CreateToggleSwitch(MainFrame, "AUTO PET (FLY)", 15, function(state) isAutoPet = state end)
 CreateToggleSwitch(MainFrame, "AUTO HARVEST", 180, function(state) isAutoHarvest = state end)
-CreateToggleSwitch(MainFrame, "AUTO SELL TIMER", 345, function(state) isAutoSell = state end)
+CreateToggleSwitch(MainFrame, "AUTO STEAL", 345, function(state) isAutoSteal = state end)
+CreateToggleSwitch(MainFrame, "AUTO SELL TIMER", 510, function(state) isAutoSell = state end)
 
 -- ==========================================
 -- 🔓 SYSTEM NOCLIP NÂNG CAO
@@ -289,7 +291,55 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 💰 LOGIC 2: AUTO SELL (GIẢ LẬP CLICK MÀN HÌNH CHÍNH XÁC 100%)
+-- 🥷 LOGIC 2: AUTO STEAL SIÊU TỐC (CHẠM & NHẤN GIỮ)
+-- ==========================================
+
+local function IsStealPrompt(prompt)
+    local actionText = prompt.ActionText:lower()
+    local objectText = prompt.ObjectText:lower()
+    return string.find(actionText, "steal") or string.find(objectText, "steal") or string.find(actionText, "trộm")
+end
+
+task.spawn(function()
+    while true do
+        if isAutoSteal and not isBusy then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+                if hrp then
+                    -- Bỏ giới hạn khoảng cách và bỏ thời gian nhấn giữ (HoldDuration = 0)
+                    for _, prompt in ipairs(Workspace:GetDescendants()) do
+                        if prompt:IsA("ProximityPrompt") and IsStealPrompt(prompt) then
+                            prompt.RequiresLineOfSight = false
+                            prompt.MaxActivationDistance = 999999
+                            prompt.HoldDuration = 0 -- Bỏ qua yêu cầu nhấn giữ đếm giây
+                        end
+                    end
+
+                    -- Thu hoạch/Trộm siêu tốc (Xử lý song song bằng task.spawn)
+                    for _, prompt in ipairs(Workspace:GetDescendants()) do
+                        if isBusy or not isAutoSteal then break end
+
+                        if prompt:IsA("ProximityPrompt") and prompt.Enabled and IsStealPrompt(prompt) then
+                            task.spawn(function()
+                                pcall(function()
+                                    if fireproximityprompt then
+                                        fireproximityprompt(prompt)
+                                    end
+                                end)
+                            end)
+                        end
+                    end
+                end
+            end)
+        end
+        task.wait(0.05)
+    end
+end)
+
+-- ==========================================
+-- 💰 LOGIC 3: AUTO SELL (GIẢ LẬP CLICK MÀN HÌNH CHÍNH XÁC 100%)
 -- ==========================================
 
 local function FindStevenNPC()
@@ -320,11 +370,10 @@ local function ClickGUIOption1()
             if string.find(txt, "sell inventory") or string.find(txt, "#1") or string.find(txt, "sell all") then
                 local btn = obj:IsA("TextButton") and obj or obj.Parent
                 if btn and btn:IsA("TextButton") then
-                    -- Bấm bằng Virtual Input màn hình
                     local pos = btn.AbsolutePosition
                     local size = btn.AbsoluteSize
                     local centerX = pos.X + (size.X / 2)
-                    local centerY = pos.Y + (size.Y / 2) + 36 -- Bù thanh CoreGui Roblox
+                    local centerY = pos.Y + (size.Y / 2) + 36
 
                     pcall(function()
                         VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, true, game, 0)
@@ -332,7 +381,6 @@ local function ClickGUIOption1()
                         VirtualInputManager:SendMouseButtonEvent(centerX, centerY, 0, false, game, 0)
                     end)
 
-                    -- Backup connection fire
                     pcall(function()
                         for _, conn in ipairs(getconnections(btn.MouseButton1Click)) do conn:Fire() end
                         if firesignal then firesignal(btn.MouseButton1Click) end
@@ -346,7 +394,7 @@ end
 task.spawn(function()
     while true do
         if isAutoSell and not isBusy then
-            isBusy = true -- Khóa Auto Harvest
+            isBusy = true
             
             pcall(function()
                 local char = LocalPlayer.Character
@@ -360,11 +408,9 @@ task.spawn(function()
                         local targetPart = steven:IsA("BasePart") and steven or steven:FindFirstChildWhichIsA("BasePart", true)
                         
                         if targetPart then
-                            -- 1. Bay áp sát trực diện Steven
                             FlyTo(targetPart.CFrame * CFrame.new(0, 0, -2.5), 40)
                             task.wait(0.4)
 
-                            -- 2. Kích hoạt Prompt mở cuộc trò chuyện
                             local prompt = steven:FindFirstChildWhichIsA("ProximityPrompt", true) or targetPart:FindFirstChildWhichIsA("ProximityPrompt", true) or (targetPart.Parent and targetPart.Parent:FindFirstChildWhichIsA("ProximityPrompt", true))
                             if prompt then
                                 prompt.RequiresLineOfSight = false
@@ -374,7 +420,6 @@ task.spawn(function()
                                 end
                             end
 
-                            -- Giả lập bấm phím 'E' để chắc chắn mở được NPC
                             pcall(function()
                                 VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
                                 task.wait(0.05)
@@ -383,13 +428,11 @@ task.spawn(function()
 
                             task.wait(0.8)
 
-                            -- 3. Liên tục chọn tùy chọn #1
                             for i = 1, 10 do
                                 ClickGUIOption1()
                                 task.wait(0.2)
                             end
 
-                            -- 4. Bay mượt quay về vườn
                             FlyTo(oldCFrame, 40)
                         end
                     end
@@ -397,8 +440,8 @@ task.spawn(function()
             end)
 
             task.wait(0.5)
-            isBusy = false -- Mở khóa Auto Harvest
-            task.wait(15) -- Tự động đi bán mỗi 15 giây
+            isBusy = false
+            task.wait(15)
         else
             task.wait(1)
         end
@@ -406,7 +449,7 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 🐾 LOGIC 3: AUTO PET
+-- 🐾 LOGIC 4: AUTO PET
 -- ==========================================
 
 local COOLDOWN_PET = 12
